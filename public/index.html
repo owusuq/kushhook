@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kushhook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main id="auth" class="center">
+  <h1 class="logo">Kush<span>hook</span></h1>
+  <p>Chat, meet people and share what you love.</p>
+  <button id="login">Sign in with Google</button>
+  <form id="setup" hidden>
+    <input id="name" placeholder="Your name" maxlength="40" required>
+    <input id="username" placeholder="Username (a-z, 0-9, _)" pattern="[a-z0-9_]{3,20}" required>
+    <label><input type="checkbox" required> I am 18 or over</label>
+    <button>Create profile</button>
+  </form>
+  <p id="error" role="alert"></p>
+</main>
+<div id="app" hidden>
+  <aside>
+    <header><b class="logo small">Kush<span>hook</span></b><button id="logout" class="ghost">Sign out</button></header>
+    <nav><button data-tab="chats">Chats</button><button data-tab="people">People</button><button data-tab="feed">Feed</button></nav>
+    <section id="chats"></section>
+    <section id="people" hidden><input id="search" placeholder="Search name or username"><div id="results"></div></section>
+    <section id="feed" hidden>
+      <form id="postForm">
+        <select id="type"><option value="link">Link or update</option></select>
+        <textarea id="postText" placeholder="Share something" maxlength="1000" required></textarea>
+        <button>Post</button>
+      </form>
+      <div id="posts"></div>
+    </section>
+  </aside>
+  <article id="chat">
+    <header><button id="back" class="ghost">Back</button><b id="who">Choose a chat</b><button id="block" class="ghost" hidden>Block</button></header>
+    <div id="messages"></div>
+    <form id="send" hidden>
+      <div id="emojis"></div>
+      <button type="button" id="smile" aria-label="Emojis">😊</button>
+      <input id="msg" placeholder="Message" maxlength="2000" autocomplete="off">
+      <button>Send</button>
+    </form>
+  </article>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
