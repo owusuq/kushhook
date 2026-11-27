@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.kushhook.app",
+        "sha256_cert_fingerprints": ["04:83:6A:F6:09:8E:56:26:E3:A4:DF:E9:93:9C:C6:CB:BE:BB:F8:E7:E3:5C:0F:B8:CD:6B:85:11:82:66:82:FD"]
+      }
+    }]
