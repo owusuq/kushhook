@@ -164,6 +164,7 @@ async function start() {
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
   if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
   loadRead(); await setupKeys().catch(fail); beat();
+  idleWatch();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
     watchLatest(links.filter(l => l.status === "accepted").map(l => l.id));
@@ -500,6 +501,17 @@ async function removeMessage(mr, m) {
   if (m.path) (await getDocs(collection(db, mr.path, "chunks"))).forEach(c => batch.delete(c.ref));
   batch.delete(mr);
   await batch.commit();
+}
+// Auto logout after 10 min of no activity. Runs in the browser only, so it costs nothing.
+const IDLE_MS = 10 * 60 * 1000;
+let lastActive = Date.now(), idleOn = false;
+function idleWatch() {
+  if (idleOn) return; idleOn = true;
+  const touch = () => { lastActive = Date.now(); };
+  ["pointerdown", "keydown", "scroll", "touchstart"].forEach(e => addEventListener(e, touch, { passive: true }));
+  const check = () => { if (Date.now() - lastActive > IDLE_MS) $("logout").click(); };
+  setInterval(check, 15000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
 }
 async function purgeMine(chat) {
   if (!chat) return;
