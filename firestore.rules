@@ -176,12 +176,13 @@ service cloud.firestore {
       allow read: if member();
       // Only admins post. Everyone else just reads.
       allow create: if member() && isAdmin()
-        && request.resource.data.keys().hasOnly(['uid','username','type','text','at'])
+        && request.resource.data.keys().hasOnly(['uid','username','type','text','title','at'])
         && request.resource.data.uid == uid()
         && request.resource.data.username == get(path_('users', uid())).data.username
         && request.resource.data.type in ['link','odds']
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 60))
         && request.resource.data.at == request.time;
       allow delete: if member() && (resource.data.uid == uid() || isAdmin());
     }

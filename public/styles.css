@@ -333,3 +333,12 @@ img,video{max-width:100%}
 }
 
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* link posts: a title, tap to open in a new page */
+.ptitle{display:block;font-size:1.05em;margin:2px 0 4px}
+.linkcard{display:flex;align-items:center;gap:10px;margin:8px 0 4px;padding:14px 16px;border-radius:18px;text-decoration:none;color:#fff;background:linear-gradient(135deg,var(--brand),var(--btn));box-shadow:0 6px 16px color-mix(in srgb,var(--btn) 40%,transparent)}
+.linkcard b{flex:1;min-width:0;font-size:1.05em;overflow-wrap:anywhere}
+.linkcard small{opacity:.85;font-size:12px;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linkcard .go{font-size:20px;font-weight:800}
+.linkcard:active{transform:scale(.98)}
+@media(max-width:380px){.linkcard small{display:none}}

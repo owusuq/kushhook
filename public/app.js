@@ -189,7 +189,17 @@ async function start() {
       const p = d.data(), box = el("div", "", "post");
       box.append(el("b", "@" + p.username), el("small", p.at?.toMillis ? clock(p.at.toMillis()) : "", "time"));
       if (p.type === "odds") box.append(el("span", "Bet odds, 18+ only\n", "odds")); else box.append("\n");
-      rich(box, p.text);
+      const url = p.title ? (p.text.match(/https?:\/\/[^\s<>"]+/i) || [])[0] : null;
+      if (url) {
+        let host = ""; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { host = ""; }
+        const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener noreferrer", className: "linkcard" });
+        a.append(el("b", p.title), el("small", host ? "Opens " + host : "Tap to open"), el("span", "↗", "go"));
+        box.append(a);
+        const rest = p.text.replace(url, "").trim(); if (rest) rich(box, rest);
+      } else {
+        if (p.title) box.append(el("b", p.title, "ptitle"), "\n");
+        rich(box, p.text);
+      }
       const foot = el("div", "", "foot");
       if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
       if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
@@ -378,8 +388,9 @@ for (const x of ["😀","😂","😍","😎","😢","🙏","👍","🔥","❤️
 $("postForm").onsubmit = e => {
   e.preventDefault();
   const text = $("postText").value.trim();
-  if (text) addDoc(collection(db, "posts"), { uid: me.uid, username: profile.username, type: $("type").value, text, at: serverTimestamp() })
-    .then(() => $("postText").value = "").catch(fail);
+  const title = $("postTitle").value.trim();
+  if (text) addDoc(collection(db, "posts"), { uid: me.uid, username: profile.username, type: $("type").value, text, ...(title ? { title } : {}), at: serverTimestamp() })
+    .then(() => { $("postText").value = ""; $("postTitle").value = ""; }).catch(fail);
 };
 function tab(name) {
   for (const b of document.querySelectorAll("nav button")) { b.classList.toggle("on", b.dataset.tab === name); $(b.dataset.tab).hidden = b.dataset.tab !== name; }
