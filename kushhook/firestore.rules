@@ -32,9 +32,10 @@ service cloud.firestore {
         && request.resource.data.nameLower == request.resource.data.name.lower()
         && getAfter(path_('usernames', request.resource.data.username)).data.uid == uid();
       allow update: if signedIn() && id == uid()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username','avatar','usernameChangedAt','pub'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username','avatar','usernameChangedAt','pub','bio'])
         && request.resource.data.username.matches('^[a-z0-9_]{3,20}$')
         && (!('avatar' in request.resource.data) || request.resource.data.avatar.matches('^[0-9]{1,2}[.][0-9]{1,2}$'))
+        && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 140))
         && (!('pub' in request.resource.data) || (request.resource.data.pub is string && request.resource.data.pub.size() <= 400))
         && getAfter(path_('usernames', request.resource.data.username)).data.uid == uid()
         && (request.resource.data.username == resource.data.username
@@ -112,6 +113,23 @@ service cloud.firestore {
         && (!('typingAt' in request.resource.data) || request.resource.data.typingAt is timestamp)
         && (request.resource.data.get('typing', null) == null || (request.resource.data.typing is string && request.resource.data.typing.size() <= 80));
       allow delete: if signedIn() && id == uid();
+    }
+    match /reports/{r} {
+      // Any member can report once per person, message or post. Only admins can read or clear reports.
+      allow create: if member()
+        && request.resource.data.keys().hasOnly(['by','against','kind','key','ref','reason','sample','at'])
+        && request.resource.data.keys().hasAll(['by','against','kind','key','ref','reason','sample','at'])
+        && request.resource.data.by == uid()
+        && request.resource.data.kind in ['user','message','post']
+        && request.resource.data.key is string && request.resource.data.key.matches('^[A-Za-z0-9]{1,100}$')
+        && r == uid() + '_' + request.resource.data.kind + '_' + request.resource.data.key
+        && request.resource.data.against is string && request.resource.data.against.matches('^[A-Za-z0-9]{1,128}$')
+        && request.resource.data.against != uid()
+        && request.resource.data.ref is string && request.resource.data.ref.size() <= 250
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 300
+        && request.resource.data.sample is string && request.resource.data.sample.size() <= 500
+        && request.resource.data.at == request.time;
+      allow read, delete: if isAdmin();
     }
     match /posts/{p} {
       allow read: if member();

@@ -27,7 +27,24 @@ const avatar = (u, big) => {
   a.style.background = `linear-gradient(135deg, ${col[0]}, ${col[1]})`;
   return a;
 };
-const nameBlock = u => { const s = el("span", "", "pname"); s.append(el("b", u.name), el("small", "@" + u.username)); return s; };
+const nameBlock = (u, bio) => { const s = el("span", "", "pname"); s.append(el("b", u.name), el("small", "@" + u.username)); if (bio && u.bio) s.append(el("small", u.bio, "bio")); return s; };
+// "14:05", "Yesterday 14:05", "Tue 14:05", "12 Nov 14:05"
+const clock = t => {
+  const d = new Date(t), n = new Date(), hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const days = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+  return days <= 0 ? hm : days === 1 ? "Yesterday " + hm : days < 7 ? d.toLocaleDateString([], { weekday: "short" }) + " " + hm : d.toLocaleDateString([], { day: "numeric", month: "short" }) + " " + hm;
+};
+// Reports go to the admin. One report per person, message or post.
+async function report(kind, key, against, ref, sample = "") {
+  if (!against || against === me.uid) return;
+  const what = kind === "message" ? "this message. The sender's username and the message text will be sent to the admin" : kind === "post" ? "this post" : "this person";
+  const reason = prompt(`Report ${what}.\n\nWhat is wrong? (optional)`);
+  if (reason === null) return;
+  try {
+    await setDoc(doc(db, "reports", `${me.uid}_${kind}_${key}`), { by: me.uid, against, kind, key, ref, reason: reason.trim().slice(0, 300), sample: sample.slice(0, 500), at: serverTimestamp() });
+    alert("Thank you. The admin has been told.");
+  } catch (e) { console.error(e); alert("Could not send the report. You may have already reported this."); }
+}
 const getUser = async id => users[id] ??= (await getDoc(doc(db, "users", id))).data();
 const pair = id => [me.uid, id].sort().join("_");
 
@@ -140,9 +157,10 @@ async function start() {
   $("auth").hidden = true; $("app").hidden = false;
   admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
-  await setupKeys().catch(fail); beat();
+  loadRead(); await setupKeys().catch(fail); beat();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    watchLatest(links.filter(l => l.status === "accepted").map(l => l.id));
     await drawChats(); search(); if (admin) drawMembers();
     if (current && !links.some(l => l.id === current && l.status === "accepted")) closeChat();
     else if (current && links.find(l => l.id === current)?.clear?.[me.uid]?.toMillis?.() !== openClear) openChat(current, chatUser);
@@ -150,21 +168,57 @@ async function start() {
   stops.push(onSnapshot(query(collection(db, "posts"), orderBy("at", "desc"), limit(50)), s => {
     $("posts").replaceChildren(...s.docs.map(d => {
       const p = d.data(), box = el("div", "", "post");
-      box.append(el("b", "@" + p.username + "  "));
+      box.append(el("b", "@" + p.username), el("small", p.at?.toMillis ? clock(p.at.toMillis()) : "", "time"));
       if (p.type === "odds") box.append(el("span", "Bet odds, 18+ only\n", "odds")); else box.append("\n");
       rich(box, p.text);
-      if (admin || p.uid === me.uid) box.append("\n", button("Delete", () => deleteDoc(d.ref)));
+      const foot = el("div", "", "foot");
+      if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
+      if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
+      if (foot.childNodes.length) box.append(foot);
       return box;
     }));
   }, fail));
+  if (admin) stops.push(onSnapshot(query(collection(db, "reports"), orderBy("at", "desc"), limit(50)), s => {
+    reports = s.docs.map(d => ({ id: d.id, ...d.data(), at: d.data().at?.toMillis?.() || Date.now() }));
+    const bd = document.querySelector("#adminTab .badge"); bd.hidden = !reports.length; bd.textContent = reports.length;
+    drawReports().catch(() => {});
+  }, () => {}));
   tab("chats"); drawMe(); if (!profile.avatar) openProfile();
 }
 
+// ---- New-message dots (remembered on this device) ----
+let readAt = {}, latest = {}, watching = {}, firstRun = false;
+const readKey = () => "kh_read_" + me.uid;
+const loadRead = () => { try { const t = localStorage.getItem(readKey()); firstRun = t === null; readAt = JSON.parse(t || "{}"); } catch { readAt = {}; } };
+const saveRead = () => { try { localStorage.setItem(readKey(), JSON.stringify(readAt)); } catch {} };
+const viewing = id => current === id && $("app").classList.contains("open") && document.visibilityState === "visible";
+const unread = id => { const m = latest[id]; return !!m && m.from !== me.uid && m.at > (readAt[id] || 0); };
+function markRead(id) { const m = latest[id]; if (m && m.at > (readAt[id] || 0)) { readAt[id] = m.at; saveRead(); drawChats().catch(() => {}); } }
+function watchLatest(ids) {
+  for (const id of Object.keys(watching)) if (!ids.includes(id)) { watching[id](); delete watching[id]; delete latest[id]; }
+  for (const id of ids) if (!watching[id]) watching[id] = onSnapshot(query(collection(db, "friends", id, "messages"), orderBy("at", "desc"), limit(1)), s => {
+    const d = s.docs[0]?.data(), at = d?.at?.toMillis?.();
+    if (!at) return;
+    latest[id] = { at, from: d.from };
+    if (firstRun && readAt[id] === undefined) { readAt[id] = at; saveRead(); }
+    if (viewing(id) && at > (readAt[id] || 0)) { readAt[id] = at; saveRead(); }
+    drawChats().catch(() => {});
+  }, () => {});
+}
+addEventListener("visibilitychange", () => { if (me && current && viewing(current)) markRead(current); });
+
 async function drawChats() {
   const found = await Promise.all(links.filter(l => l.status === "accepted" || l.status === "pending").map(async l => ({ l, u: await getUser(l.users.find(x => x !== me.uid)) })));
-  const all = found.filter(x => x.u), card = ({ l, u }, ...btns) => { const row = el("div", "", "row"); row.append(avatar(u), nameBlock(u), ...btns); return row; };
+  const all = found.filter(x => x.u), card = ({ l, u }, ...btns) => { const row = el("div", "", "row"); row.append(avatar(u), nameBlock(u, l.status === "pending"), ...btns); return row; };
   const ghost = (text, fn) => Object.assign(button(text, fn), { className: "ghost" });
-  const chats = all.filter(x => x.l.status === "accepted").map(x => card(x, button("Open", () => openChat(x.l.id, x.u))));
+  const chats = all.filter(x => x.l.status === "accepted").sort((a, b) => (latest[b.l.id]?.at || 0) - (latest[a.l.id]?.at || 0)).map(x => {
+    const r = card(x, button("Open", () => openChat(x.l.id, x.u))), m = latest[x.l.id];
+    if (m) r.querySelector(".pname").append(el("small", (m.from === me.uid ? "You · " : "") + clock(m.at), "when"));
+    if (unread(x.l.id)) { r.classList.add("new"); r.querySelector(".pname b").append(el("i", "", "dot")); }
+    return r;
+  });
+  const n = all.filter(x => x.l.status === "accepted" && unread(x.l.id)).length, cb = document.querySelector('nav [data-tab="chats"] .badge');
+  cb.hidden = !n; cb.textContent = n; document.title = n ? `(${n}) Kushhook` : "Kushhook";
   $("chats").replaceChildren(...(chats.length ? chats : [el("p", "No chats yet. Open People to send a request.")]));
   const incoming = all.filter(x => x.l.status === "pending" && x.l.from !== me.uid), sent = all.filter(x => x.l.status === "pending" && x.l.from === me.uid);
   $("requests").replaceChildren(
@@ -185,7 +239,7 @@ async function search() {
   if (run !== searchRun) return;
   $("results").replaceChildren(...[...found].filter(([id]) => id !== me.uid && !links.some(l => l.id === pair(id))).map(([id, u]) => {
     const row = el("div", "", "row");
-    row.append(avatar(u), nameBlock(u), button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(id)), { users: [me.uid, id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
+    row.append(avatar(u), nameBlock(u, true), button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(id)), { users: [me.uid, id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
     return row;
   }));
 }
@@ -200,7 +254,7 @@ function openChat(id, u) {
   openClear = cleared?.toMillis?.();
   const label = el("span", "", "whotext"), pr = Object.assign(el("small", "", "presence"), { id: "presence" });
   label.append(u.name, pr); $("who").replaceChildren(avatar(u), label);
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = false; $("app").classList.add("open");
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = false; $("app").classList.add("open"); markRead(id);
   // wait for the other person's public key, then lock and unlock messages with the key you share
   const other = id.split("_").find(x => x !== me.uid); let first, done = false;
   ckey = null; partnerPub = null; lastSnap = null; seen = null; keyReady = new Promise(r => first = r);
@@ -218,20 +272,21 @@ function openChat(id, u) {
   stopChat = onSnapshot(q, s => { lastSnap = s; render(); }, fail);
 }
 async function render() {
-  const run = ++renderRun, s = lastSnap;
+  const run = ++renderRun, s = lastSnap, cid = current;
   if (!s) return;
   await keyReady;
   const rows = await Promise.all(s.docs.map(async d => {
     const raw = d.data(), m = await readMsg(raw), mine = raw.from === me.uid, bubble = el("div", "", "bubble" + (mine ? " me" : ""));
     if (m.path) bubble.append(media(m, d.ref));
     rich(bubble, m.text);
-    if (mine || admin) {
-      bubble.append("\n", button("Delete", async () => {
-        if (!confirm("Delete this message for everyone?")) return;
-        await removeMessage(d.ref, raw);
-      }));
-      bubble.lastChild.className = "del";
-    }
+    const at = raw.at?.toMillis?.(), foot = el("div", "", "foot");
+    foot.append(el("small", at ? clock(at) : "sending…", "time"));
+    if (mine || admin) foot.append(Object.assign(button("Delete", async () => {
+      if (!confirm("Delete this message for everyone?")) return;
+      await removeMessage(d.ref, raw);
+    }), { className: "del" }));
+    if (!mine) foot.append(Object.assign(button("Report", () => report("message", d.id, raw.from, `friends/${cid}/messages/${d.id}`, m.text || m.name || "")), { className: "del" }));
+    bubble.append(foot);
     return bubble;
   }));
   if (run !== renderRun) return;
@@ -241,8 +296,9 @@ async function render() {
 function closeChat() {
   stopChat?.(); stopKeys?.(); stopPresence?.(); typing(false); purgeMine(current); clearUrls(); current = null; ckey = null; lastSnap = null;
   $("messages").replaceChildren(); $("who").textContent = "Choose a chat"; setStatus("");
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = true; $("app").classList.remove("open");
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = true; $("app").classList.remove("open");
 }
+$("report").onclick = () => { const other = current.split("_").find(x => x !== me.uid); report("user", other, other, "users/" + other); };
 $("clear").onclick = () => confirm("Clear this chat for you? The other person keeps their copy.") && updateDoc(doc(db, "friends", current), { ["clear." + me.uid]: serverTimestamp() }).catch(fail);
 $("back").onclick = () => { $("app").classList.remove("open"); purgeMine(current); typing(false); };
 $("block").onclick = () => confirm("Block this person?") && updateDoc(doc(db, "friends", current), { status: "blocked", blockedBy: me.uid }).catch(fail);
@@ -290,6 +346,21 @@ function tab(name) {
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => tab(b.dataset.tab));
 
+let reports = [];
+async function drawReports() {
+  const rows = await Promise.all(reports.map(async r => {
+    const [by, against] = await Promise.all([getUser(r.by), getUser(r.against)]), row = el("div", "", "report");
+    row.append(el("b", r.kind === "user" ? "Person reported" : r.kind === "post" ? "Post reported" : "Message reported"),
+      el("small", `${clock(r.at)} · by @${by?.username || "deleted"} · about @${against?.username || "deleted"}`));
+    if (r.reason) row.append(el("p", r.reason));
+    if (r.sample) row.append(el("small", "Text shared by the reporter:"), el("p", r.sample, "sample"));
+    const acts = el("div", "", "foot");
+    if (r.kind === "post") acts.append(button("Delete post", async () => { await deleteDoc(doc(db, r.ref)).catch(() => {}); await deleteDoc(doc(db, "reports", r.id)); }));
+    acts.append(Object.assign(button("Dismiss", () => deleteDoc(doc(db, "reports", r.id))), { className: "ghost" }));
+    row.append(acts); return row;
+  }));
+  $("reports").replaceChildren(el("h3", `Reports (${reports.length})`), ...(rows.length ? rows : [el("p", "No reports. All calm.")]));
+}
 let allUsers = [];
 async function loadMembers() {
   const s = await getDocs(query(collection(db, "users"), orderBy("username"), limit(300)));
@@ -327,7 +398,7 @@ function openProfile() {
   const [c, s] = (profile.avatar || "").split(".").map(Number);
   pick = { c: palette[c] ? c : Math.floor(Math.random() * palette.length), s: symbols[s] ? s : Math.floor(Math.random() * symbols.length) };
   nameWait = (profile.usernameChangedAt?.toMillis?.() || 0) + 14 * 864e5 - Date.now();
-  $("newName").value = profile.username; $("newName").readOnly = nameWait > 0; $("profileError").textContent = ""; $("cancelProfile").hidden = !profile.avatar;
+  $("bio").value = profile.bio || ""; $("newName").value = profile.username; $("newName").readOnly = nameWait > 0; $("profileError").textContent = ""; $("cancelProfile").hidden = !profile.avatar;
   $("nameHint").textContent = nameWait > 0 ? `You can change your username again in ${Math.ceil(nameWait / 864e5)} day(s).` : "a-z, 0-9 and _ only, 3 to 20 characters. You can change it once every 14 days.";
   $("deleteAccount").hidden = admin;
   drawPick(); $("profile").showModal();
@@ -340,12 +411,12 @@ $("profileForm").onsubmit = async e => {
   const name = $("newName").value.trim(), code = pick.c + "." + pick.s, changed = name !== profile.username;
   if (!/^[a-z0-9_]{3,20}$/.test(name)) { $("profileError").textContent = "Username: 3 to 20 characters, a-z, 0-9 or _"; return; }
   if (changed && nameWait > 0) { $("profileError").textContent = "You changed your username recently. Try again later."; return; }
-  const batch = writeBatch(db), data = { username: name, avatar: code };
+  const batch = writeBatch(db), data = { username: name, avatar: code, bio: $("bio").value.trim().slice(0, 140) };
   if (changed) { data.usernameChangedAt = serverTimestamp(); batch.set(doc(db, "usernames", name), { uid: me.uid }); batch.delete(doc(db, "usernames", profile.username)); }
   batch.update(doc(db, "users", me.uid), data);
   try { await batch.commit(); }
   catch (err) { console.error(err); $("profileError").textContent = changed ? "Could not save. That username may already be taken." : "Could not save. Try again."; return; }
-  profile = { ...profile, username: name, avatar: code, ...(changed ? { usernameChangedAt: Timestamp.now() } : {}) }; users[me.uid] = profile;
+  profile = { ...profile, username: name, avatar: code, bio: data.bio, ...(changed ? { usernameChangedAt: Timestamp.now() } : {}) }; users[me.uid] = profile;
   $("profile").close(); drawMe();
 };
 // Delete account: removes your messages, posts, keys and profile, then your sign-in
