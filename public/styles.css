@@ -267,3 +267,25 @@ aside>.credit{flex:none;order:1}
 .callbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}
 .callbtns button{min-width:104px}
 @media(max-width:700px){aside>.credit{padding-bottom:calc(86px + env(safe-area-inset-bottom))}}
+
+/* motion: soft fade on tabs, slide on chats, pop on hearts, pulse on rings, shimmer while loading */
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes slideIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes heartPop{0%{transform:scale(1)}40%{transform:scale(1.5)}70%{transform:scale(.92)}100%{transform:scale(1)}}
+@keyframes dotPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--hook) 60%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes ringPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--hook) 55%,transparent)}70%{box-shadow:0 0 0 18px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes btnPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+@keyframes shimmer{to{background-position:-200% 0}}
+aside>section:not([hidden]){animation:fadeUp .22s ease}
+#chat.swap{animation:slideIn .26s ease}
+.like.pop{animation:heartPop .38s ease}
+.dot{animation:dotPulse 1.6s ease-out infinite}
+#callBox.ringing #callAvatar .avatar{animation:ringPulse 1.4s ease-out infinite}
+#callBox.ringing #callAnswer{animation:btnPulse 1s ease-in-out infinite}
+.row.skel{min-height:64px;pointer-events:none}
+.row.skel.tall{min-height:96px}
+.skel .sk{display:block;border-radius:12px;background:linear-gradient(90deg,var(--field) 30%,var(--line) 50%,var(--field) 70%);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+.skel .sk.c{width:44px;height:44px;border-radius:50%;flex:none}
+.skel .sklines{flex:1;display:flex;flex-direction:column;gap:8px}
+.skel .sk.b{height:12px;width:70%}.skel .sk.b.short{width:40%}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important}}

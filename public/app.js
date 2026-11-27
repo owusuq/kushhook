@@ -8,6 +8,13 @@ const $ = id => document.getElementById(id);
 let peopleHidden = false;
 let me, profile, admin = false, current, chatUser, openClear, links = [], stops = [], stopChat;
 const users = {};
+const bump = (node, cls) => { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); };
+const skeletons = (n, tall) => Array.from({ length: n }, () => {
+  const row = el("div", "", "row skel" + (tall ? " tall" : "")), bars = el("span", "", "sklines");
+  bars.append(el("i", "", "sk b"), el("i", "", "sk b short"));
+  row.append(el("i", "", "sk c"), bars); return row;
+});
+let popId = null;
 const isQuota = e => e?.code === "resource-exhausted" || /quota/i.test(e?.message || "");
 function banner() {
   if (document.getElementById("quotaBanner")) return;
@@ -177,6 +184,8 @@ async function start() {
   $("postForm").hidden = !admin; // only admins post to the feed; everyone else reads and taps links
   if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
   stops.push(onSnapshot(doc(db, "settings", "app"), s => { peopleHidden = !!s.data()?.peopleHidden; applyPeople(); }, () => {}));
+  $("chats").replaceChildren(...skeletons(3)); $("posts").replaceChildren(...skeletons(2, true));
+  setTimeout(() => document.querySelectorAll(".skel").forEach(n => n.remove()), 8000);
   loadRead(); await setupKeys().catch(fail); beat();
   idleWatch(); callWatch();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
@@ -201,7 +210,8 @@ async function start() {
       if (target) { box.classList.add("tap"); box.onclick = ev => { if (!ev.target.closest("a,button")) window.open(target, "_blank", "noopener,noreferrer"); }; }
       const foot = el("div", "", "foot");
       const likes = Array.isArray(p.likes) ? p.likes : [], liked = likes.includes(me.uid);
-      foot.append(Object.assign(button((liked ? "♥ " : "♡ ") + likes.length, () => updateDoc(d.ref, { likes: liked ? arrayRemove(me.uid) : arrayUnion(me.uid) })), { className: "del like" + (liked ? " on" : "") }));
+      const pop = liked && popId === d.id; if (pop) popId = null;
+      foot.append(Object.assign(button((liked ? "♥ " : "♡ ") + likes.length, () => { if (!liked) popId = d.id; return updateDoc(d.ref, { likes: liked ? arrayRemove(me.uid) : arrayUnion(me.uid) }); }), { className: "del like" + (liked ? " on" : "") + (pop ? " pop" : "") }));
       if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
       if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
       box.append(foot);
@@ -295,7 +305,7 @@ $("search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => sear
 
 let lastSnap, renderRun = 0, stopKeys, stopPresence, seen, lastType = 0, keyReady = Promise.resolve();
 function openChat(id, u) {
-  stopChat?.(); stopKeys?.(); stopPresence?.(); const prev = current; current = id; chatUser = u;
+  stopChat?.(); stopKeys?.(); stopPresence?.(); const prev = current; current = id; chatUser = u; if (id !== prev) bump($("chat"), "swap");
   if (prev !== id) { if (prev) { purgeMine(prev); clearUrls(); } purgeMine(id); }
   const cleared = links.find(l => l.id === id)?.clear?.[me.uid];
   openClear = cleared?.toMillis?.();
@@ -656,6 +666,7 @@ async function mic() {
 }
 function callUI(state, o = {}) {
   $("callBox").hidden = false; $("callState").textContent = state;
+  $("callBox").classList.toggle("ringing", /^(Calling|Incoming)/.test(state));
   $("callAnswer").hidden = !o.answer; $("callMute").hidden = !o.mute; $("callRetry").hidden = !o.retry;
   $("callEnd").textContent = o.end || "End call"; $("callTime").hidden = !o.time;
 }
