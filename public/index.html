@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Kushhook</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap">
-<link rel="stylesheet" href="styles.css?v=1795756109069">
+<link rel="stylesheet" href="styles.css?v=1795756624037">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#f6f3fc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151220" media="(prefers-color-scheme: dark)">
@@ -35,6 +35,14 @@
   <button id="apkno" class="ghost" aria-label="Dismiss">✕</button>
 </div>
 
+<div id="textbox" role="dialog" aria-label="Text size" hidden>
+  <span class="tsa s">A</span>
+  <input id="tsrange" type="range" min="85" max="150" step="5" value="100" aria-label="Text size">
+  <span class="tsa l">A</span>
+  <span id="tsvalue" aria-live="polite">100%</span>
+  <button type="button" id="tsreset" class="ghost">Reset</button>
+</div>
+
 <main id="auth" class="center">
   <h1 class="logo">Kush<span>hook</span></h1>
   <p class="tag">Chat, meet people and share what you love.</p>
@@ -43,23 +51,17 @@
     <input id="name" placeholder="Your name" maxlength="40" required>
     <input id="username" placeholder="Username (a-z, 0-9, _)" pattern="[a-z0-9_]{3,20}" required>
     <label class="check"><input type="checkbox" required> I am 18 or over</label>
-    <label class="check"><input type="checkbox" required> <span>I agree to the <a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> and <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
     <button>Create profile</button>
   </form>
   <p id="error" role="alert"></p>
-  <p class="legal">By continuing you agree to our <a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> and <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
 </main>
-
-<div id="notice" hidden>
-  <span>Kushhook only uses the storage it needs to keep you signed in and remember your settings. No ads, no tracking. <a href="legal.html#storage" target="_blank" rel="noopener">Learn more</a></span>
-  <button id="noticeOk">Got it</button>
-</div>
 
 <div id="app" hidden>
   <aside>
     <header>
       <b class="logo small">Kush<span>hook</span></b>
       <button id="me" class="ghost" aria-label="Edit profile"></button>
+      <button class="icon aa" aria-label="Text size" title="Text size" aria-expanded="false"><b>Aa</b></button>
       <button id="logout" class="icon" aria-label="Sign out" title="Sign out"><svg class="ic"><use href="#i-logout"/></svg></button>
     </header>
     <nav>
@@ -86,6 +88,7 @@
     <header>
       <button id="back" class="icon" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
       <b id="who">Choose a chat</b>
+      <button class="icon aa" aria-label="Text size" title="Text size" aria-expanded="false"><b>Aa</b></button>
       <button id="lock" class="icon" aria-label="Check encryption" title="Encryption" hidden><svg class="ic"><use href="#i-lock"/></svg></button>
       <button id="clear" class="icon" aria-label="Clear chat" title="Clear chat" hidden><svg class="ic"><use href="#i-trash"/></svg></button>
       <button id="report" class="icon" aria-label="Report this person" title="Report" hidden><svg class="ic"><use href="#i-flag"/></svg></button>
@@ -114,7 +117,6 @@
       <p id="profileError" role="alert"></p>
       <div class="actions"><button type="button" id="cancelProfile" class="ghost">Cancel</button><button>Save</button></div>
       <button type="button" id="deleteAccount" class="danger">Delete my account</button>
-      <p class="legal"><a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> · <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy</a> · <a href="legal.html#storage" target="_blank" rel="noopener">Cookies</a></p>
     </form>
   </dialog>
   <dialog id="lockbox">
@@ -144,17 +146,8 @@
   } catch (e) {}
 })();
 </script>
-<script>
-(function () {
-  try {
-    var n = document.getElementById("notice"), seen = false;
-    try { seen = localStorage.getItem("kh_notice") === "1"; } catch (e) {}
-    if (!seen) n.hidden = false;
-    document.getElementById("noticeOk").onclick = function () { n.hidden = true; try { localStorage.setItem("kh_notice", "1"); } catch (e) {} };
-  } catch (e) {}
-})();
-</script>
-<script type="module" src="app.js?v=1795756109069"></script>
+<script src="textsize.js"></script>
+<script type="module" src="app.js?v=1795756624037"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>
