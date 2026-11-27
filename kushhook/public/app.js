@@ -136,6 +136,11 @@ $("logout").onclick = () => purgeMine(current).then(() => signOut(auth)).then(()
 onAuthStateChanged(auth, async user => {
   if (!user) return;
   me = user;
+  const ban = await getDoc(doc(db, "banned", me.uid)).then(d => d.data(), () => null);
+  if (ban) {
+    $("error").textContent = ban.kind === "removed" ? "This account has been removed from Kushhook." : "This account is suspended. Please contact the admin.";
+    $("login").hidden = false; $("setup").hidden = true; await signOut(auth); return;
+  }
   profile = (await getDoc(doc(db, "users", me.uid))).data();
   $("login").hidden = true;
   if (profile) return start();
@@ -157,6 +162,7 @@ async function start() {
   $("auth").hidden = true; $("app").hidden = false;
   admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
+  if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
   loadRead(); await setupKeys().catch(fail); beat();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -209,7 +215,7 @@ addEventListener("visibilitychange", () => { if (me && current && viewing(curren
 
 async function drawChats() {
   const found = await Promise.all(links.filter(l => l.status === "accepted" || l.status === "pending").map(async l => ({ l, u: await getUser(l.users.find(x => x !== me.uid)) })));
-  const all = found.filter(x => x.u), card = ({ l, u }, ...btns) => { const row = el("div", "", "row"); row.append(avatar(u), nameBlock(u, l.status === "pending"), ...btns); return row; };
+  const all = found.filter(x => x.u && !x.u.suspended), card = ({ l, u }, ...btns) => { const row = el("div", "", "row"); row.append(avatar(u), nameBlock(u, l.status === "pending"), ...btns); return row; };
   const ghost = (text, fn) => Object.assign(button(text, fn), { className: "ghost" });
   const chats = all.filter(x => x.l.status === "accepted").sort((a, b) => (latest[b.l.id]?.at || 0) - (latest[a.l.id]?.at || 0)).map(x => {
     const r = card(x, button("Open", () => openChat(x.l.id, x.u))), m = latest[x.l.id];
@@ -248,7 +254,7 @@ async function search() {
     if (words.some(w => w.startsWith(term)) || words.map(w => w[0]).join("").startsWith(term)) return 2;
     return un.includes(term) || n.includes(term) ? 3 : -1;
   };
-  const list = all.filter(u => u.id !== me.uid && !links.some(l => l.id === pair(u.id))).map(u => [rank(u), u]).filter(x => x[0] >= 0)
+  const list = all.filter(u => !u.suspended && u.id !== me.uid && !links.some(l => l.id === pair(u.id))).map(u => [rank(u), u]).filter(x => x[0] >= 0)
     .sort((a, b) => a[0] - b[0] || (a[1].nameLower || "").localeCompare(b[1].nameLower || "")).slice(0, 50);
   $("results").replaceChildren(
     ...(list.length ? [el("p", term ? `${list.length} found` : `${list.length} people`, "count")] : [el("p", term ? "No one matches that. Try fewer letters." : "No one to add yet.")]),
@@ -371,27 +377,58 @@ async function drawReports() {
     if (r.sample) row.append(el("small", "Text shared by the reporter:"), el("p", r.sample, "sample"));
     const acts = el("div", "", "foot");
     if (r.kind === "post") acts.append(button("Delete post", async () => { await deleteDoc(doc(db, r.ref)).catch(() => {}); await deleteDoc(doc(db, "reports", r.id)); }));
+    if (against && !against.suspended && r.against !== me.uid) acts.append(Object.assign(button("Suspend person", async () => { await setSuspended({ id: r.against, ...against }, true); await deleteDoc(doc(db, "reports", r.id)); }), { className: "danger" }));
     acts.append(Object.assign(button("Dismiss", () => deleteDoc(doc(db, "reports", r.id))), { className: "ghost" }));
     row.append(acts); return row;
   }));
   $("reports").replaceChildren(el("h3", `Reports (${reports.length})`), ...(rows.length ? rows : [el("p", "No reports. All calm.")]));
 }
 let allUsers = [];
+let removed = [];
 async function loadMembers() {
-  const s = await getDocs(query(collection(db, "users"), orderBy("username"), limit(300)));
+  const s = await getDocs(query(collection(db, "users"), orderBy("username"), limit(1000)));
   allUsers = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  removed = (await getDocs(collection(db, "banned")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.kind === "removed");
   drawMembers();
+}
+// Suspend: hidden from everyone and locked out until you restore them.
+async function setSuspended(u, on) {
+  if (on && !confirm(`Suspend @${u.username}? They are signed out and hidden from everyone until you restore them.`)) return;
+  const batch = writeBatch(db);
+  if (on) batch.set(doc(db, "banned", u.id), { at: serverTimestamp(), by: me.uid, name: u.username, kind: "suspended" }); else batch.delete(doc(db, "banned", u.id));
+  batch.update(doc(db, "users", u.id), { suspended: on });
+  await batch.commit();
+  u.suspended = on; if (users[u.id]) users[u.id].suspended = on; pool = null; drawMembers();
+}
+// Remove: deletes their profile and posts, frees the username and locks the account out for good.
+async function removeMember(u) {
+  if (prompt(`Remove @${u.username} for good? Their profile and posts are deleted and they cannot come back unless you restore them.\n\nType REMOVE to confirm.`) !== "REMOVE") return;
+  const batch = writeBatch(db);
+  batch.set(doc(db, "banned", u.id), { at: serverTimestamp(), by: me.uid, name: u.username, kind: "removed" });
+  batch.delete(doc(db, "users", u.id)); batch.delete(doc(db, "usernames", u.username));
+  await batch.commit();
+  for (const d of (await getDocs(query(collection(db, "posts"), where("uid", "==", u.id)))).docs) await deleteDoc(d.ref).catch(() => {});
+  allUsers = allUsers.filter(x => x.id !== u.id); removed.push({ id: u.id, name: u.username, kind: "removed" }); delete users[u.id]; pool = null; drawMembers();
 }
 function drawMembers() {
   const term = $("adminSearch").value.trim().toLowerCase().replace(/^@/, "");
-  const list = allUsers.filter(u => u.id !== me.uid && (u.username.includes(term) || u.nameLower.includes(term)));
-  $("members").replaceChildren(el("p", `${allUsers.length} members`), ...list.map(u => {
-    const row = el("div", "", "row"), link = links.find(l => l.id === pair(u.id));
-    row.append(avatar(u), nameBlock(u));
-    if (link) row.append(el("small", link.status === "accepted" ? "Connected" : link.status === "pending" ? "Pending" : "Blocked"));
+  const list = allUsers.filter(u => u.id !== me.uid && ((u.username || "").includes(term) || (u.nameLower || "").includes(term)));
+  const off = allUsers.filter(u => u.suspended).length;
+  $("members").replaceChildren(el("p", `${allUsers.length} members${off ? ` · ${off} suspended` : ""}`, "count"), ...list.map(u => {
+    const row = el("div", "", "row" + (u.suspended ? " off" : "")), link = links.find(l => l.id === pair(u.id));
+    row.append(avatar(u), nameBlock(u, true));
+    if (u.suspended) row.append(el("small", "Suspended", "tag"));
+    else if (link) row.append(el("small", link.status === "accepted" ? "Connected" : link.status === "pending" ? "Pending" : "Blocked"));
     else row.append(button("Connect", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: "accepted" })));
+    const foot = el("div", "", "foot");
+    foot.append(u.suspended ? button("Restore", () => setSuspended(u, false)) : Object.assign(button("Suspend", () => setSuspended(u, true)), { className: "ghost" }),
+      Object.assign(button("Remove", () => removeMember(u)), { className: "danger" }));
+    row.append(foot);
     return row;
-  }));
+  }), ...(removed.length ? [el("h3", `Removed (${removed.length})`), ...removed.map(x => {
+    const row = el("div", "", "row off"); row.append(el("span", "@" + x.name, "pname"), button("Restore", async () => { await deleteDoc(doc(db, "banned", x.id)); removed = removed.filter(y => y.id !== x.id); drawMembers(); }));
+    return row;
+  })] : []));
 }
 $("adminSearch").oninput = drawMembers;
 

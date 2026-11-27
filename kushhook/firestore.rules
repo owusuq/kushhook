@@ -4,7 +4,7 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
     function path_(c, id) { return /databases/$(db)/documents/$(c)/$(id); }
-    function member() { return signedIn() && exists(path_('users', uid())); }
+    function member() { return signedIn() && exists(path_('users', uid())) && !exists(path_('banned', uid())); }
     function isAdmin() { return exists(path_('admins', uid()))
       || (request.auth.token.email == 'daakyehenefoundation@gmail.com' && request.auth.token.email_verified == true); }
 
@@ -16,6 +16,7 @@ service cloud.firestore {
     match /admins/{id} { allow get: if signedIn() && id == uid(); }
 
     match /usernames/{name} {
+      allow delete: if isAdmin();
       allow create: if signedIn() && name.matches('^[a-z0-9_]{3,20}$')
         && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == uid()
         && getAfter(path_('users', uid())).data.username == name;
@@ -42,7 +43,21 @@ service cloud.firestore {
             ? request.resource.data.get('usernameChangedAt', null) == resource.data.get('usernameChangedAt', null)
             : (request.resource.data.usernameChangedAt == request.time
                && request.time > resource.data.get('usernameChangedAt', timestamp.date(2000, 1, 1)) + duration.value(14, 'd')));
-      allow delete: if signedIn() && id == uid();
+      allow update: if isAdmin() && id != uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended'])
+        && request.resource.data.suspended is bool;
+      allow delete: if signedIn() && (id == uid() || isAdmin());
+    }
+    match /banned/{id} {
+      // Suspended or removed accounts. Only admins write here; a person can see only their own entry.
+      allow get: if signedIn() && (id == uid() || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && id != uid() && !exists(path_('admins', id))
+        && request.resource.data.keys().hasOnly(['at','by','name','kind'])
+        && request.resource.data.by == uid() && request.resource.data.at == request.time
+        && request.resource.data.kind in ['suspended','removed']
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40;
+      allow delete: if isAdmin();
     }
     match /friends/{id} {
       allow read: if member() && uid() in resource.data.users;
