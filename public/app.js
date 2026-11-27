@@ -443,9 +443,9 @@ async function loadMembers() {
   adminIds = new Set((await getDocs(collection(db, "admins")).catch(() => ({ docs: [] }))).docs.map(d => d.id));
   drawMembers();
 }
-// Only the main admin can give or take away admin rights.
+// Any admin can make someone an admin. Only the main admin can take admin rights away.
 async function setAdmin(u, on) {
-  if (!isMain()) return;
+  if (on ? !admin : !isMain()) return;
   if (!confirm(on ? `Make @${u.username} an admin?\n\nThey will be able to post to the feed, see reports, and suspend or remove members.` : `Remove admin rights from @${u.username}?`)) return;
   if (on) await setDoc(doc(db, "admins", u.id), { by: me.uid, at: serverTimestamp() }); else await deleteDoc(doc(db, "admins", u.id));
   if (on) adminIds.add(u.id); else adminIds.delete(u.id);
@@ -485,7 +485,7 @@ function drawMembers() {
     const foot = el("div", "", "foot");
     const more = el("div", "", "more"); more.hidden = true;
     if (!isAd) more.append(Object.assign(button("Remove", () => removeMember(u)), { className: "danger" }));
-    if (isMain() && (isAd || !u.suspended)) more.append(Object.assign(button(isAd ? "Remove admin" : "Make admin", () => setAdmin(u, !isAd)), { className: isAd ? "danger" : "ghost" }));
+    if ((isAd ? isMain() : admin && !u.suspended)) more.append(Object.assign(button(isAd ? "Remove admin" : "Make admin", () => setAdmin(u, !isAd)), { className: isAd ? "danger" : "ghost" }));
     const dots = Object.assign(button("•••", () => { more.hidden = !more.hidden; }), { className: "ghost dots" });
     dots.title = dots.ariaLabel = "More actions";
     if (!isAd) foot.append(u.suspended ? button("Restore", () => setSuspended(u, false)) : Object.assign(button("Suspend", () => setSuspended(u, true)), { className: "ghost" }), dots);

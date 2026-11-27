@@ -292,3 +292,11 @@ aside>section:not([hidden]){animation:fadeUp .22s ease}
 
 /* sign-in screen: give the credit more room below the legal text */
 #auth .credit{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);width:min(100%,34ch);font-size:10.5px;opacity:.85}
+
+
+/* footer: spread across the width and fit every screen */
+.credit{box-sizing:border-box;width:100%;max-width:100%;display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;gap:2px 16px;text-align:center;overflow-wrap:anywhere;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+.credit>span{flex:0 1 auto;max-width:100%;text-wrap:balance}
+aside>.credit{flex:none;padding-top:8px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+@media(max-width:700px){aside>.credit{padding-bottom:calc(86px + env(safe-area-inset-bottom))}}
+#auth .credit{width:min(100%,46ch)}

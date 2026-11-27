@@ -15,11 +15,11 @@ service cloud.firestore {
 
     function isMainAdmin() { return request.auth != null && request.auth.token.email == 'daakyehenefoundation@gmail.com' && request.auth.token.email_verified == true; }
     // Anyone signed in can check their own admin status. Admins can see who else is one.
-    // Only the main admin can make someone an admin or take it away.
+    // Any admin can make someone an admin. Only the main admin can take admin rights away.
     match /admins/{id} {
       allow get: if signedIn() && (id == uid() || isAdmin());
       allow list: if isAdmin();
-      allow create: if isMainAdmin() && id != uid() && exists(path_('users', id)) && !exists(path_('banned', id))
+      allow create: if isAdmin() && id != uid() && exists(path_('users', id)) && !exists(path_('banned', id))
         && request.resource.data.keys().hasOnly(['by','at'])
         && request.resource.data.by == uid() && request.resource.data.at == request.time;
       allow delete: if isMainAdmin() && id != uid();
