@@ -162,6 +162,7 @@ async function start() {
   $("auth").hidden = true; $("app").hidden = false;
   admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
+  $("postForm").hidden = !admin; // only admins post to the feed; everyone else reads and taps links
   if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
   loadRead(); await setupKeys().catch(fail); beat();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
@@ -177,6 +178,8 @@ async function start() {
       box.append(el("b", "@" + p.username), el("small", p.at?.toMillis ? clock(p.at.toMillis()) : "", "time"));
       if (p.type === "odds") box.append(el("span", "Bet odds, 18+ only\n", "odds")); else box.append("\n");
       rich(box, p.text);
+      const first = p.text.match(/https?:\/\/\S+/);
+      if (first) { box.classList.add("tap"); box.onclick = ev => { if (!ev.target.closest("a,button")) window.open(first[0], "_blank", "noopener,noreferrer"); }; }
       const foot = el("div", "", "foot");
       if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
       if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
@@ -421,9 +424,12 @@ function drawMembers() {
     else if (link) row.append(el("small", link.status === "accepted" ? "Connected" : link.status === "pending" ? "Pending" : "Blocked"));
     else row.append(button("Connect", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: "accepted" })));
     const foot = el("div", "", "foot");
-    foot.append(u.suspended ? button("Restore", () => setSuspended(u, false)) : Object.assign(button("Suspend", () => setSuspended(u, true)), { className: "ghost" }),
-      Object.assign(button("Remove", () => removeMember(u)), { className: "danger" }));
-    row.append(foot);
+    const more = el("div", "", "more"); more.hidden = true;
+    more.append(Object.assign(button("Remove", () => removeMember(u)), { className: "danger" }));
+    const dots = Object.assign(button("•••", () => { more.hidden = !more.hidden; }), { className: "ghost dots" });
+    dots.title = dots.ariaLabel = "More actions";
+    foot.append(u.suspended ? button("Restore", () => setSuspended(u, false)) : Object.assign(button("Suspend", () => setSuspended(u, true)), { className: "ghost" }), dots);
+    row.append(foot, more);
     return row;
   }), ...(removed.length ? [el("h3", `Removed (${removed.length})`), ...removed.map(x => {
     const row = el("div", "", "row off"); row.append(el("span", "@" + x.name, "pname"), button("Restore", async () => { await deleteDoc(doc(db, "banned", x.id)); removed = removed.filter(y => y.id !== x.id); drawMembers(); }));

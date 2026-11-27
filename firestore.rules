@@ -148,7 +148,7 @@ service cloud.firestore {
     }
     match /posts/{p} {
       allow read: if member();
-      allow create: if member()
+      allow create: if member() && isAdmin()
         && request.resource.data.keys().hasOnly(['uid','username','type','text','at'])
         && request.resource.data.uid == uid()
         && request.resource.data.username == get(path_('users', uid())).data.username
