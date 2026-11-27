@@ -4,29 +4,72 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Kushhook</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap">
+<link rel="stylesheet" href="styles.css?v=1795750873466">
+<link rel="manifest" href="manifest.webmanifest">
+<script>try{var t=localStorage.getItem("kushhook-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<meta name="theme-color" content="#f6f3fc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151220" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icon-192.png">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.8c1.8.7 3.1 2.4 3.5 5.2"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l2.5-7.5A2 2 0 0 1 7.4 4h9.2a2 2 0 0 1 1.9 1.5L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></symbol>
+  <symbol id="i-feed" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3.5"/><path d="M7 9h10M7 13h10M7 17h6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M16 8l4 4-4 4M20 12H9"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01" stroke-width="3.2"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+  <symbol id="i-block" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7-7L13 4.5a3.4 3.4 0 0 1 4.8 4.8L9.6 17.5a1.8 1.8 0 0 1-2.6-2.6L14.5 7.5"/></symbol>
+</svg>
+
+<div id="apkbar" hidden>
+  <span>Get the Kushhook Android app</span>
+  <a id="apkget" href="https://github.com/owusuq/kushhook-app/releases/latest/download/Kushhook.1.apk" download="Kushhook.apk">Download</a>
+  <button id="apkno" class="ghost" aria-label="Dismiss">✕</button>
+</div>
+
 <main id="auth" class="center">
   <h1 class="logo">Kush<span>hook</span></h1>
-  <p>Chat, meet people and share what you love.</p>
-  <button id="login">Sign in with Google</button>
+  <p class="tag">Chat, meet people and share what you love.</p>
+  <button id="login" class="google"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>Sign in with Google</button>
   <form id="setup" hidden>
     <input id="name" placeholder="Your name" maxlength="40" required>
     <input id="username" placeholder="Username (a-z, 0-9, _)" pattern="[a-z0-9_]{3,20}" required>
-    <label><input type="checkbox" required> I am 18 or over</label>
+    <label class="check"><input type="checkbox" required> I am 18 or over</label>
     <button>Create profile</button>
   </form>
   <p id="error" role="alert"></p>
+  <footer class="credit"><span>Developed by <b>Kwadjo Owusu-Ansah Quarshie</b></span><span>Kushhook is still in maintenance. Some things may change or be slow.</span></footer>
 </main>
+
 <div id="app" hidden>
   <aside>
-    <header><b class="logo small">Kush<span>hook</span></b><button id="logout" class="ghost">Sign out</button></header>
-    <nav><button data-tab="chats">Chats</button><button data-tab="people">People</button><button data-tab="feed">Feed</button><button data-tab="admin" id="adminTab" hidden>Admin</button></nav>
+    <header>
+      <b class="logo small">Kush<span>hook</span></b>
+      <button id="me" class="ghost" aria-label="Edit profile"></button>
+      <button id="logout" class="icon" aria-label="Sign out" title="Sign out"><svg class="ic"><use href="#i-logout"/></svg></button>
+    </header>
+    <nav>
+      <button data-tab="chats"><svg class="ic"><use href="#i-chat"/></svg><span>Chats</span><i class="badge" hidden></i></button>
+      <button data-tab="people"><svg class="ic"><use href="#i-people"/></svg><span>People</span></button>
+      <button data-tab="requests" id="reqTab"><svg class="ic"><use href="#i-inbox"/></svg><span>Requests</span><i class="badge" hidden></i></button>
+      <button data-tab="feed"><svg class="ic"><use href="#i-feed"/></svg><span>Feed</span></button>
+      <button data-tab="admin" id="adminTab" hidden><svg class="ic"><use href="#i-shield"/></svg><span>Admin</span><i class="badge" hidden></i></button>
+    </nav>
     <section id="chats"></section>
     <section id="people" hidden><input id="search" placeholder="Search name or username"><div id="results"></div></section>
-    <section id="admin" hidden><input id="adminSearch" placeholder="Filter members"><div id="members"></div></section>
+    <section id="requests" hidden></section>
+    <section id="admin" hidden><div id="reports"></div><input id="adminSearch" placeholder="Filter members"><div id="members"></div></section>
     <section id="feed" hidden>
       <form id="postForm">
         <select id="type"><option value="link">Link or update</option></select>
@@ -35,21 +78,94 @@
       </form>
       <div id="posts"></div>
     </section>
+    <footer class="credit"><span>Developed by <b>Kwadjo Owusu-Ansah Quarshie</b></span><span>Kushhook is still in maintenance. Some things may change or be slow.</span></footer>
   </aside>
   <article id="chat">
-    <header><button id="back" class="ghost">Back</button><b id="who">Choose a chat</b><button id="clear" class="ghost" hidden>Clear chat</button><button id="block" class="ghost" hidden>Block</button></header>
+    <header>
+      <button id="back" class="icon" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
+      <b id="who">Choose a chat</b>
+      <button id="call" class="icon" aria-label="Voice call (voice only)" title="Voice call only" hidden><svg class="ic"><use href="#i-phone"/></svg></button>
+      <button id="more" class="icon" aria-label="More options" aria-expanded="false" hidden><svg class="ic"><use href="#i-more"/></svg></button>
+      <div id="chatMenu" hidden>
+        <button id="lock" type="button" hidden>Check encryption</button>
+        <button id="clear" type="button" hidden>Clear chat</button>
+        <button id="report" type="button" hidden>Report</button>
+        <button id="block" type="button" class="warn" hidden>Block</button>
+      </div>
+    </header>
     <div id="messages"></div>
     <form id="send" hidden>
       <small id="status" role="status"></small>
       <div id="emojis"></div>
-      <button type="button" id="smile" aria-label="Emojis">😊</button>
-      <button type="button" id="attach" aria-label="Attach photo, video or file">📎</button>
-      <input type="file" id="file" hidden accept="image/*,video/*,.pdf,.txt,.docx">
+      <button type="button" id="smile" class="icon" aria-label="Emojis"><svg class="ic"><use href="#i-smile"/></svg></button>
+      <button type="button" id="attach" class="icon" aria-label="Attach photo, video or file"><svg class="ic"><use href="#i-clip"/></svg></button>
+      <input type="file" id="file" hidden>
       <input id="msg" placeholder="Message" maxlength="2000" autocomplete="off">
-      <button>Send</button>
+      <button class="icon sendbtn" aria-label="Send"><svg class="ic"><use href="#i-send"/></svg></button>
     </form>
   </article>
+  <dialog id="profile">
+    <form id="profileForm">
+      <h2>Your profile</h2>
+      <div id="preview"></div>
+      <label>Username<input id="newName" pattern="[a-z0-9_]{3,20}" maxlength="20" autocapitalize="none" autocomplete="off" required></label>
+      <small id="nameHint"></small>
+      <label>About you<textarea id="bio" maxlength="140" rows="2" placeholder="A line about you (optional)"></textarea></label>
+      <b>Text size</b>
+      <div class="actions sizer"><button type="button" id="smaller" class="ghost" aria-label="Smaller text">A−</button><span id="sizeNow">100%</span><button type="button" id="bigger" class="ghost" aria-label="Bigger text">A+</button></div>
+      <b>Theme</b>
+      <div class="themer"><button type="button" class="ghost" data-theme-pick="auto">Auto</button><button type="button" class="ghost" data-theme-pick="light">Light</button><button type="button" class="ghost" data-theme-pick="dark">Dark</button></div>
+      <b>Colour</b><div id="colors" class="pick"></div>
+      <b>Avatar</b><div id="symbols" class="pick"></div>
+      <p id="profileError" role="alert"></p>
+      <div class="actions"><button type="button" id="cancelProfile" class="ghost">Cancel</button><button>Save</button></div>
+      <button type="button" id="deleteAccount" class="danger">Delete my account</button>
+    </form>
+  </dialog>
+  <dialog id="lockbox">
+    <form id="lockForm">
+      <h2 id="lockTitle"></h2>
+      <p id="lockText"></p>
+      <input id="pass" type="password" placeholder="Passphrase" autocomplete="off" required>
+      <input id="pass2" type="password" placeholder="Repeat passphrase" autocomplete="off" hidden>
+      <p id="lockError" role="alert"></p>
+      <div class="actions"><button type="button" id="resetKeys" class="ghost" hidden>Forgot it?</button><button>Continue</button></div>
+    </form>
+  </dialog>
 </div>
-<script type="module" src="app.js"></script>
+<div id="callBox" role="dialog" aria-modal="true" aria-label="Voice call" hidden>
+  <div class="callcard">
+    <small class="only">Voice call only. No video.</small>
+    <div id="callAvatar"></div>
+    <h2 id="callName"></h2>
+    <p id="callState"></p>
+    <p id="callTime" hidden></p>
+    <div class="callbtns">
+      <button type="button" id="callAnswer" hidden>Answer</button>
+      <button type="button" id="callMute" class="ghost" hidden>Mute</button>
+      <button type="button" id="callRetry" hidden>Try again</button>
+      <button type="button" id="callEnd" class="danger">End call</button>
+    </div>
+  </div>
+  <audio id="callAudio" autoplay playsinline></audio>
+</div>
+<script>
+(function () {
+  try {
+    var bar = document.getElementById("apkbar");
+    var android = /Android/i.test(navigator.userAgent);
+    var inApp = matchMedia("(display-mode: standalone)").matches || document.referrer.indexOf("android-app://") === 0;
+    var hidden = false;
+    try { hidden = localStorage.getItem("apkbar") === "no"; } catch (e) {}
+    if (android && !inApp && !hidden) bar.hidden = false;
+    document.getElementById("apkno").onclick = function () { bar.hidden = true; try { localStorage.setItem("apkbar", "no"); } catch (e) {} };
+    document.getElementById("apkget").onclick = function () {
+      setTimeout(function () { bar.firstElementChild.textContent = "Open the downloaded file to install. If asked, allow installs from this browser."; }, 400);
+    };
+  } catch (e) {}
+})();
+</script>
+<script type="module" src="app.js?v=1795750873466"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>
