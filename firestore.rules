@@ -1,0 +1,205 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function path_(c, id) { return /databases/$(db)/documents/$(c)/$(id); }
+    function member() { return signedIn() && exists(path_('users', uid())) && !exists(path_('banned', uid())); }
+    function isAdmin() { return exists(path_('admins', uid()))
+      || (request.auth.token.email == 'daakyehenefoundation@gmail.com' && request.auth.token.email_verified == true); }
+
+    function friendsWith(other) {
+      let a = uid() < other ? uid() + '_' + other : other + '_' + uid();
+      return exists(path_('friends', a)) && get(path_('friends', a)).data.status == 'accepted';
+    }
+
+    function isMainAdmin() { return request.auth != null && request.auth.token.email == 'daakyehenefoundation@gmail.com' && request.auth.token.email_verified == true; }
+    // Anyone signed in can check their own admin status. Admins can see who else is one.
+    // Only the main admin can make someone an admin or take it away.
+    match /admins/{id} {
+      allow get: if signedIn() && (id == uid() || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isMainAdmin() && id != uid() && exists(path_('users', id)) && !exists(path_('banned', id))
+        && request.resource.data.keys().hasOnly(['by','at'])
+        && request.resource.data.by == uid() && request.resource.data.at == request.time;
+      allow delete: if isMainAdmin() && id != uid();
+    }
+
+    match /usernames/{name} {
+      allow delete: if isAdmin();
+      allow create: if signedIn() && name.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == uid()
+        && getAfter(path_('users', uid())).data.username == name;
+      allow delete: if signedIn() && resource.data.uid == uid()
+        && (!existsAfter(path_('users', uid())) || getAfter(path_('users', uid())).data.username != name);
+    }
+    match /users/{id} {
+      allow get: if signedIn() && (id == uid() || member());
+      allow list: if member();
+      allow create: if signedIn() && id == uid()
+        && request.resource.data.keys().hasOnly(['name','username','nameLower','adult'])
+        && request.resource.data.adult == true
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40
+        && request.resource.data.nameLower == request.resource.data.name.lower()
+        && getAfter(path_('usernames', request.resource.data.username)).data.uid == uid();
+      allow update: if signedIn() && id == uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username','avatar','usernameChangedAt','pub','bio'])
+        && request.resource.data.username.matches('^[a-z0-9_]{3,20}$')
+        && (!('avatar' in request.resource.data) || request.resource.data.avatar.matches('^[0-9]{1,2}[.][0-9]{1,2}$'))
+        && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 140))
+        && (!('pub' in request.resource.data) || (request.resource.data.pub is string && request.resource.data.pub.size() <= 400))
+        && getAfter(path_('usernames', request.resource.data.username)).data.uid == uid()
+        && (request.resource.data.username == resource.data.username
+            ? request.resource.data.get('usernameChangedAt', null) == resource.data.get('usernameChangedAt', null)
+            : (request.resource.data.usernameChangedAt == request.time
+               && request.time > resource.data.get('usernameChangedAt', timestamp.date(2000, 1, 1)) + duration.value(14, 'd')));
+      allow update: if isAdmin() && id != uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended'])
+        && request.resource.data.suspended is bool;
+      allow delete: if signedIn() && (id == uid() || isAdmin());
+    }
+    match /calls/{callee} {
+      // Voice calls: one small setup note per person being called. The audio itself never touches Firebase.
+      allow get: if member() && (callee == uid() || resource.data.caller == uid());
+      allow create: if member() && callee != uid() && friendsWith(callee)
+        && request.resource.data.keys().hasOnly(['caller','callee','status','offer','at'])
+        && request.resource.data.caller == uid() && request.resource.data.callee == callee
+        && request.resource.data.status == 'ringing' && request.resource.data.at == request.time
+        && request.resource.data.offer.sdp is string && request.resource.data.offer.sdp.size() < 20000;
+      allow update: if member() && (callee == uid() || resource.data.caller == uid())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','answer'])
+        && request.resource.data.status in ['accepted','declined','busy']
+        && (callee == uid() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        && (!('answer' in request.resource.data) || request.resource.data.answer.sdp.size() < 20000);
+      allow delete: if member() && (callee == uid() || resource.data.caller == uid()
+        || request.time > resource.data.at + duration.value(2, 'm'));
+    }
+    match /banned/{id} {
+      // Suspended or removed accounts. Only admins write here; a person can see only their own entry.
+      allow get: if signedIn() && (id == uid() || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && id != uid() && !exists(path_('admins', id))
+        && request.resource.data.keys().hasOnly(['at','by','name','kind'])
+        && request.resource.data.by == uid() && request.resource.data.at == request.time
+        && request.resource.data.kind in ['suspended','removed']
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40;
+      allow delete: if isAdmin();
+    }
+    match /friends/{id} {
+      allow read: if member() && uid() in resource.data.users;
+      allow create: if member()
+        && request.resource.data.keys().hasOnly(['users','from','status'])
+        && request.resource.data.users.size() == 2
+        && request.resource.data.users[0] < request.resource.data.users[1]
+        && id == request.resource.data.users[0] + '_' + request.resource.data.users[1]
+        && uid() in request.resource.data.users
+        && exists(path_('users', request.resource.data.users[0]))
+        && exists(path_('users', request.resource.data.users[1]))
+        && request.resource.data.from == uid()
+        && (request.resource.data.status == 'pending'
+            || (request.resource.data.status == 'accepted' && isAdmin()));
+      allow update: if member() && uid() in resource.data.users && (
+        (resource.data.status == 'pending' && resource.data.from != uid()
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        || (resource.data.status != 'blocked' && request.resource.data.status == 'blocked'
+          && request.resource.data.blockedBy == uid()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','blockedBy']))
+        || (resource.data.status == 'accepted' && request.resource.data.status == 'accepted'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clear'])
+          && request.resource.data.clear[uid()] == request.time
+          && request.resource.data.clear.diff(resource.data.get('clear', {})).affectedKeys().hasOnly([uid()])));
+
+      allow delete: if member() && uid() in resource.data.users
+        && (resource.data.status != 'blocked' || resource.data.blockedBy == uid());
+
+      match /messages/{m} {
+        function chat() { return get(path_('friends', id)).data; }
+        allow read: if member() && uid() in chat().users && chat().status == 'accepted';
+        allow create: if member() && uid() in chat().users && chat().status == 'accepted'
+          && request.resource.data.keys().hasOnly(['from','text','at','kind','path','name','type','parts','e'])
+          && request.resource.data.e == 1
+          && (!('path' in request.resource.data) || (request.resource.data.kind in ['image','video','file']
+              && request.resource.data.path is string
+              && request.resource.data.path.matches('chats/' + id + '/' + uid() + '/.*')
+              && request.resource.data.name is string && request.resource.data.name.size() <= 100
+              && request.resource.data.parts is int && request.resource.data.type is string))
+          && request.resource.data.from == uid() && request.resource.data.at == request.time
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 9000
+          && (request.resource.data.text.size() > 0 || 'path' in request.resource.data);
+        allow delete: if member() && uid() in chat().users && (resource.data.from == uid() || isAdmin());
+
+        match /chunks/{c} {
+          allow read: if member() && uid() in chat().users && chat().status == 'accepted';
+          allow create: if member() && uid() in chat().users && chat().status == 'accepted'
+            && request.resource.data.keys().hasOnly(['d','by']) && request.resource.data.by == uid()
+            && request.resource.data.d is bytes && request.resource.data.d.size() <= 800000;
+          allow delete: if member() && uid() in chat().users && (resource.data.by == uid() || isAdmin());
+        }
+      }
+    }
+    match /keys/{id} {
+      allow read, delete: if signedIn() && id == uid();
+      allow create, update: if signedIn() && id == uid()
+        && request.resource.data.keys().hasOnly(['salt','wrapped'])
+        && request.resource.data.salt is string && request.resource.data.wrapped is string
+        && request.resource.data.wrapped.size() < 2000;
+    }
+    match /presence/{id} {
+      allow read: if member() && (id == uid() || friendsWith(id));
+      allow create, update: if signedIn() && id == uid()
+        && request.resource.data.keys().hasOnly(['at','typing','typingAt'])
+        && (!('at' in request.resource.data) || request.resource.data.at is timestamp)
+        && (!('typingAt' in request.resource.data) || request.resource.data.typingAt is timestamp)
+        && (request.resource.data.get('typing', null) == null || (request.resource.data.typing is string && request.resource.data.typing.size() <= 80));
+      allow delete: if signedIn() && id == uid();
+    }
+    match /reports/{r} {
+      // Any member can report once per person, message or post. Only admins can read or clear reports.
+      allow create: if member()
+        && request.resource.data.keys().hasOnly(['by','against','kind','key','ref','reason','sample','at'])
+        && request.resource.data.keys().hasAll(['by','against','kind','key','ref','reason','sample','at'])
+        && request.resource.data.by == uid()
+        && request.resource.data.kind in ['user','message','post']
+        && request.resource.data.key is string && request.resource.data.key.matches('^[A-Za-z0-9]{1,100}$')
+        && r == uid() + '_' + request.resource.data.kind + '_' + request.resource.data.key
+        && request.resource.data.against is string && request.resource.data.against.matches('^[A-Za-z0-9]{1,128}$')
+        && request.resource.data.against != uid()
+        && request.resource.data.ref is string && request.resource.data.ref.size() <= 250
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 300
+        && request.resource.data.sample is string && request.resource.data.sample.size() <= 500
+        && request.resource.data.at == request.time;
+      allow read, delete: if isAdmin();
+    }
+    match /settings/{id} {
+      allow read: if member();
+      allow create, update: if isAdmin() && id == 'app'
+        && request.resource.data.keys().hasOnly(['peopleHidden'])
+        && request.resource.data.peopleHidden is bool;
+    }
+    match /posts/{p} {
+      allow read: if member();
+      allow create: if member() && isAdmin()
+        && request.resource.data.keys().hasOnly(['uid','username','type','text','at','link','likes'])
+        && request.resource.data.uid == uid()
+        && request.resource.data.username == get(path_('users', uid())).data.username
+        && request.resource.data.type in ['link','odds']
+        && (request.resource.data.type == 'link' || isAdmin())
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+        && request.resource.data.at == request.time
+        && (!('link' in request.resource.data) || (request.resource.data.link is string
+            && request.resource.data.link.size() <= 500 && request.resource.data.link.matches('^https?://.*')))
+        && request.resource.data.get('likes', []).size() == 0;
+      // Any member can like or unlike (adds or removes only their own id). Nothing else on a post can change.
+      allow update: if member()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        && request.resource.data.likes is list
+        && request.resource.data.likes.size() <= resource.data.get('likes', []).size() + 1
+        && request.resource.data.likes.toSet().difference(resource.data.get('likes', []).toSet()).hasOnly([uid()])
+        && resource.data.get('likes', []).toSet().difference(request.resource.data.likes.toSet()).hasOnly([uid()]);
+      allow delete: if member() && (resource.data.uid == uid() || isAdmin());
+    }
+  }
+}
