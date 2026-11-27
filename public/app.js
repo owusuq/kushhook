@@ -1,9 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, limitToLast, startAt, endAt, startAfter, onSnapshot, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
 import { firebaseConfig } from "./config.js";
 
-const fb = initializeApp(firebaseConfig), auth = getAuth(fb), db = getFirestore(fb);
+const fb = initializeApp(firebaseConfig), auth = getAuth(fb), db = getFirestore(fb), storage = getStorage(fb);
 const $ = id => document.getElementById(id);
 let me, profile, admin = false, current, chatUser, openClear, links = [], stops = [], stopChat;
 const users = {};
@@ -104,9 +105,17 @@ function openChat(id, u) {
   const q = cleared ? query(msgs, orderBy("at"), startAfter(cleared), limitToLast(100)) : query(msgs, orderBy("at"), limitToLast(100));
   stopChat = onSnapshot(q, s => {
     $("messages").replaceChildren(...s.docs.map(d => {
-      const m = d.data(), mine = m.from === me.uid, bubble = rich(el("div", "", "bubble" + (mine ? " me" : "")), m.text);
-      if (mine || admin) bubble.append("\n", button("Delete", () => confirm("Delete this message for everyone?") && deleteDoc(d.ref)));
-      bubble.lastChild.className = "del";
+      const m = d.data(), mine = m.from === me.uid, bubble = el("div", "", "bubble" + (mine ? " me" : ""));
+      if (m.path) bubble.append(media(m));
+      rich(bubble, m.text);
+      if (mine || admin) {
+        bubble.append("\n", button("Delete", async () => {
+          if (!confirm("Delete this message for everyone?")) return;
+          await deleteDoc(d.ref);
+          if (m.path) deleteObject(ref(storage, m.path)).catch(() => {});
+        }));
+        bubble.lastChild.className = "del";
+      }
       return bubble;
     }));
     $("messages").scrollTop = $("messages").scrollHeight;
@@ -162,3 +171,62 @@ function drawMembers() {
   }));
 }
 $("adminSearch").oninput = drawMembers;
+
+// ---- Photos, videos and files ----
+const urls = {};
+const setStatus = t => $("status").textContent = t;
+function media(m) {
+  const box = el("div", "Loading...", "media");
+  (urls[m.path] ??= getDownloadURL(ref(storage, m.path))).then(url => {
+    let node;
+    if (m.kind === "image") { node = Object.assign(el("img"), { src: url, alt: m.name || "Photo", loading: "lazy" }); node.onclick = () => window.open(url, "_blank", "noopener"); }
+    else if (m.kind === "video") node = Object.assign(el("video"), { src: url, controls: true, preload: "metadata", playsInline: true });
+    else node = Object.assign(el("a", m.name || "Download file"), { href: url, target: "_blank", rel: "noopener noreferrer" });
+    box.replaceChildren(node);
+  }).catch(() => { delete urls[m.path]; box.textContent = "File not available"; });
+  return box;
+}
+async function shrinkImage(f) {
+  const bmp = await createImageBitmap(f);
+  const s = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const c = Object.assign(document.createElement("canvas"), { width: Math.round(bmp.width * s), height: Math.round(bmp.height * s) });
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise((ok, no) => c.toBlob(b => b ? ok(b) : no(new Error("Could not read that photo.")), "image/jpeg", 0.8));
+}
+async function shrinkVideo(f) {
+  if (typeof VideoEncoder === "undefined") throw new Error("This browser cannot shrink videos. Use an up-to-date Chrome, Edge or Safari.");
+  setStatus("Loading video tools...");
+  const { Input, Output, Conversion, BlobSource, BufferTarget, Mp4OutputFormat, ALL_FORMATS } = await import("https://cdn.jsdelivr.net/npm/mediabunny@1/+esm");
+  const input = new Input({ source: new BlobSource(f), formats: ALL_FORMATS });
+  if (await input.computeDuration() > 60) throw new Error("Videos can be 1 minute at most.");
+  const track = await input.getPrimaryVideoTrack();
+  if (!track) throw new Error("No video found in that file.");
+  const portrait = track.displayHeight > track.displayWidth, side = Math.min(track.displayWidth, track.displayHeight);
+  const video = { bitrate: 700000, ...(side > 480 ? (portrait ? { width: 480 } : { height: 480 }) : {}) };
+  const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+  const conversion = await Conversion.init({ input, output, video, audio: { bitrate: 64000 } });
+  conversion.onProgress = p => setStatus("Shrinking video... " + Math.round(p * 100) + "%");
+  await conversion.execute();
+  return new Blob([output.target.buffer], { type: "video/mp4" });
+}
+const allowed = ["application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+async function sendFile(chat, f) {
+  let blob = f, kind = "file", type = f.type, name = f.name;
+  if (f.type.startsWith("image/")) { setStatus("Preparing photo..."); blob = await shrinkImage(f); kind = "image"; type = "image/jpeg"; name = name.replace(/\.[^.]+$/, "") + ".jpg"; }
+  else if (f.type.startsWith("video/")) { blob = await shrinkVideo(f); kind = "video"; type = "video/mp4"; name = name.replace(/\.[^.]+$/, "") + ".mp4"; }
+  else if (!allowed.includes(f.type)) throw new Error("You can send photos, videos, PDF, Word and text files.");
+  else if (f.size > 5 * 1024 * 1024) throw new Error("Files must be under 5 MB.");
+  if (blob.size > 25 * 1024 * 1024) throw new Error("That file is still too big after shrinking.");
+  setStatus("Uploading...");
+  const path = `chats/${chat}/${me.uid}/${Date.now()}_${name.replace(/[^\w.-]/g, "_")}`;
+  await uploadBytes(ref(storage, path), blob, { contentType: type });
+  await addDoc(collection(db, "friends", chat, "messages"), { from: me.uid, text: "", at: serverTimestamp(), kind, path, name: name.slice(0, 100) });
+  setStatus("");
+}
+$("attach").onclick = () => $("file").click();
+$("file").onchange = async () => {
+  const f = $("file").files[0]; $("file").value = "";
+  if (!f || !current) return;
+  try { await sendFile(current, f); }
+  catch (e) { console.error(e); setStatus(e.code === "storage/unauthorized" || e.code === "storage/unknown" ? "Upload failed. Storage may not be set up yet." : e.message); }
+};

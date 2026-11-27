@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function chatDoc(chatId) { return firestore.get(/databases/(default)/documents/friends/$(chatId)).data; }
+    function inChat(chatId) {
+      return request.auth != null && request.auth.uid in chatDoc(chatId).users && chatDoc(chatId).status == 'accepted';
+    }
+    function isAdmin() {
+      return firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        || (request.auth.token.email == 'daakyehenefoundation@gmail.com' && request.auth.token.email_verified == true);
+    }
+    match /chats/{chatId}/{uid}/{file} {
+      allow read: if inChat(chatId);
+      allow create: if inChat(chatId) && request.auth.uid == uid
+        && request.resource.size < 25 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'video/mp4', 'application/pdf', 'text/plain',
+             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      allow delete: if request.auth != null && (request.auth.uid == uid || isAdmin());
+    }
+  }
+}

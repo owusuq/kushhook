@@ -40,8 +40,11 @@
     <header><button id="back" class="ghost">Back</button><b id="who">Choose a chat</b><button id="clear" class="ghost" hidden>Clear chat</button><button id="block" class="ghost" hidden>Block</button></header>
     <div id="messages"></div>
     <form id="send" hidden>
+      <small id="status" role="status"></small>
       <div id="emojis"></div>
       <button type="button" id="smile" aria-label="Emojis">😊</button>
+      <button type="button" id="attach" aria-label="Attach photo, video or file">📎</button>
+      <input type="file" id="file" hidden accept="image/*,video/*,.pdf,.txt,.docx">
       <input id="msg" placeholder="Message" maxlength="2000" autocomplete="off">
       <button>Send</button>
     </form>

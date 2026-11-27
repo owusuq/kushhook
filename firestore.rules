@@ -55,10 +55,15 @@ service cloud.firestore {
         function chat() { return get(path_('friends', id)).data; }
         allow read: if member() && uid() in chat().users && chat().status == 'accepted';
         allow create: if member() && uid() in chat().users && chat().status == 'accepted'
-          && request.resource.data.keys().hasOnly(['from','text','at'])
+          && request.resource.data.keys().hasOnly(['from','text','at','kind','path','name'])
+          && (!('path' in request.resource.data) || (request.resource.data.kind in ['image','video','file']
+              && request.resource.data.path is string
+              && request.resource.data.path.matches('chats/' + id + '/' + uid() + '/.*')
+              && request.resource.data.name is string && request.resource.data.name.size() <= 100))
           && request.resource.data.from == uid() && request.resource.data.at == request.time
           && request.resource.data.text is string
-          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000;
+          && request.resource.data.text.size() <= 2000
+          && (request.resource.data.text.size() > 0 || 'path' in request.resource.data);
         allow delete: if member() && uid() in chat().users && (resource.data.from == uid() || isAdmin());
       }
     }
