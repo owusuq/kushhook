@@ -214,3 +214,4 @@ dialog::backdrop{background:rgba(20,10,40,.35);-webkit-backdrop-filter:blur(8px)
 /* fallbacks: no blur support, or the person asked their phone for less transparency */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){:root{--glass:var(--card);--glass2:var(--card)}}
 @media(prefers-reduced-transparency:reduce){:root{--glass:var(--card);--glass2:var(--card);--sheen:transparent}}
+.count{padding:0 6px 8px!important;margin:0;text-align:left!important;font-size:13px;font-weight:700;color:var(--muted)}

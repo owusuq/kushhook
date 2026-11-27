@@ -229,22 +229,37 @@ async function drawChats() {
   { const bd = $("reqTab").querySelector(".badge"); bd.hidden = !incoming.length; bd.textContent = incoming.length; }
 }
 
-let searchRun = 0;
+let searchRun = 0, pool = null, poolAt = 0;
+// Members are loaded once (and refreshed every minute) so every letter you type filters instantly
+async function loadPool() {
+  if (pool && Date.now() - poolAt < 60000) return pool;
+  const s = await getDocs(query(collection(db, "users"), orderBy("nameLower"), limit(500)));
+  pool = s.docs.map(d => ({ id: d.id, ...d.data() })); poolAt = Date.now(); return pool;
+}
 async function search() {
-  const run = ++searchRun, term = $("search").value.trim().toLowerCase().replace(/^@/, ""), found = new Map();
-  for (const field of ["username", "nameLower"]) {
-    const s = await getDocs(query(collection(db, "users"), orderBy(field), startAt(term), endAt(term + "\uf8ff"), limit(20)));
-    s.forEach(d => found.set(d.id, d.data()));
-  }
+  const run = ++searchRun, term = $("search").value.trim().toLowerCase().replace(/^@/, ""), all = await loadPool();
   if (run !== searchRun) return;
-  $("results").replaceChildren(...[...found].filter(([id]) => id !== me.uid && !links.some(l => l.id === pair(id))).map(([id, u]) => {
-    const row = el("div", "", "row");
-    row.append(avatar(u), nameBlock(u, true), button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(id)), { users: [me.uid, id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
-    return row;
-  }));
+  // best matches first: username starts with it, name starts with it, a word or the initials start with it, then anywhere
+  const rank = u => {
+    const n = u.nameLower || "", un = u.username || "", words = n.split(/\s+/).filter(Boolean);
+    if (!term) return 5;
+    if (un.startsWith(term)) return 0;
+    if (n.startsWith(term)) return 1;
+    if (words.some(w => w.startsWith(term)) || words.map(w => w[0]).join("").startsWith(term)) return 2;
+    return un.includes(term) || n.includes(term) ? 3 : -1;
+  };
+  const list = all.filter(u => u.id !== me.uid && !links.some(l => l.id === pair(u.id))).map(u => [rank(u), u]).filter(x => x[0] >= 0)
+    .sort((a, b) => a[0] - b[0] || (a[1].nameLower || "").localeCompare(b[1].nameLower || "")).slice(0, 50);
+  $("results").replaceChildren(
+    ...(list.length ? [el("p", term ? `${list.length} found` : `${list.length} people`, "count")] : [el("p", term ? "No one matches that. Try fewer letters." : "No one to add yet.")]),
+    ...list.map(([, u]) => {
+      const row = el("div", "", "row");
+      row.append(avatar(u), nameBlock(u, true), button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
+      return row;
+    }));
 }
 let timer;
-$("search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => search().catch(fail), 300); };
+$("search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => search().catch(fail), 80); };
 
 let lastSnap, renderRun = 0, stopKeys, stopPresence, seen, lastType = 0, keyReady = Promise.resolve();
 function openChat(id, u) {
