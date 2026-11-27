@@ -175,7 +175,7 @@ async function start() {
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
   if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
   loadRead(); await setupKeys().catch(fail); beat();
-  idleWatch();
+  idleWatch(); callWatch();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
     watchLatest(links.filter(l => l.status === "accepted").map(l => l.id));
@@ -287,8 +287,8 @@ function openChat(id, u) {
   const cleared = links.find(l => l.id === id)?.clear?.[me.uid];
   openClear = cleared?.toMillis?.();
   const label = el("span", "", "whotext"), pr = Object.assign(el("small", "", "presence"), { id: "presence" });
-  label.append(u.name, pr); $("who").replaceChildren(avatar(u), label);
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = false; $("app").classList.add("open"); markRead(id);
+  label.append(el("span", u.name, "wname"), pr); $("who").replaceChildren(avatar(u), label);
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("call").hidden = false; $("app").classList.add("open"); markRead(id);
   // wait for the other person's public key, then lock and unlock messages with the key you share
   const other = id.split("_").find(x => x !== me.uid); let first, done = false;
   ckey = null; partnerPub = null; lastSnap = null; seen = null; keyReady = new Promise(r => first = r);
@@ -330,7 +330,7 @@ async function render() {
 function closeChat() {
   stopChat?.(); stopKeys?.(); stopPresence?.(); typing(false); purgeMine(current); clearUrls(); current = null; ckey = null; lastSnap = null;
   $("messages").replaceChildren(); $("who").textContent = "Choose a chat"; setStatus("");
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = true; $("app").classList.remove("open");
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("call").hidden = true; $("chatMenu").hidden = true; $("app").classList.remove("open");
 }
 $("report").onclick = () => { const other = current.split("_").find(x => x !== me.uid); report("user", other, other, "users/" + other); };
 $("clear").onclick = () => confirm("Clear this chat for you? The other person keeps their copy.") && updateDoc(doc(db, "friends", current), { ["clear." + me.uid]: serverTimestamp() }).catch(fail);
@@ -524,7 +524,7 @@ function idleWatch() {
   if (idleOn) return; idleOn = true;
   const touch = () => { lastActive = Date.now(); };
   ["pointerdown", "keydown", "scroll", "touchstart"].forEach(e => addEventListener(e, touch, { passive: true }));
-  const check = () => { if (Date.now() - lastActive > IDLE_MS) $("logout").click(); };
+  const check = () => { if (!inCall && Date.now() - lastActive > IDLE_MS) $("logout").click(); };
   setInterval(check, 15000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
 }
@@ -602,3 +602,169 @@ $("file").onchange = async () => {
   try { await sendFile(current, f); }
   catch (e) { console.error(e); if (isQuota(e)) { setStatus(""); return banner(); } setStatus(e.code === "permission-denied" ? "Upload failed. Publish the latest firestore.rules." : e.message); }
 };
+
+// chat menu (clear, report, block)
+$("more").onclick = e => { e.stopPropagation(); const open = $("chatMenu").hidden; $("chatMenu").hidden = !open; $("more").setAttribute("aria-expanded", open); };
+$("chatMenu").onclick = () => { $("chatMenu").hidden = true; $("more").setAttribute("aria-expanded", false); };
+document.addEventListener("click", () => { $("chatMenu").hidden = true; });
+
+// text size: 90% to 150%, remembered on this phone
+const SIZES = [0.9, 1, 1.15, 1.3, 1.5];
+let sizeAt = 1;
+try { const v = Number(localStorage.getItem("kushhook-text")); if (v >= 0 && v < SIZES.length && Number.isInteger(v)) sizeAt = v; } catch {}
+function applySize() {
+  document.documentElement.style.setProperty("--ts", SIZES[sizeAt]);
+  $("sizeNow").textContent = Math.round(SIZES[sizeAt] * 100) + "%";
+  $("smaller").disabled = sizeAt === 0; $("bigger").disabled = sizeAt === SIZES.length - 1;
+  try { localStorage.setItem("kushhook-text", sizeAt); } catch {}
+}
+$("smaller").onclick = () => { if (sizeAt > 0) { sizeAt--; applySize(); } };
+$("bigger").onclick = () => { if (sizeAt < SIZES.length - 1) { sizeAt++; applySize(); } };
+applySize();
+
+// ---------- voice calls (voice only) ----------
+// The audio goes straight between the two phones, so it uses none of your free Firebase limits.
+// Only a tiny "ringing" note is written to Firestore to set the call up. Both people need the app open.
+const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+let call = null, inCall = false;
+const iceDone = pc => new Promise(ok => {
+  if (pc.iceGatheringState === "complete") return ok();
+  const t = setTimeout(ok, 4000);
+  pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); ok(); } });
+});
+async function mic() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Calls are not supported in this browser.");
+  try { return await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+  catch { throw new Error("Please allow the microphone to make calls."); }
+}
+function callUI(state, o = {}) {
+  $("callBox").hidden = false; $("callState").textContent = state;
+  $("callAnswer").hidden = !o.answer; $("callMute").hidden = !o.mute; $("callRetry").hidden = !o.retry;
+  $("callEnd").textContent = o.end || "End call"; $("callTime").hidden = !o.time;
+}
+function showCall(user, state, o) {
+  const a = avatar(user); a.classList.add("big");
+  $("callAvatar").replaceChildren(a); $("callName").textContent = user.name; $("callMute").textContent = "Mute"; callUI(state, o);
+}
+function peer(stream) {
+  const pc = new RTCPeerConnection(ICE);
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+  pc.ontrack = e => { $("callAudio").srcObject = e.streams[0]; $("callAudio").play?.().catch(() => {}); };
+  pc.onconnectionstatechange = () => {
+    if (!call || call.pc !== pc) return;
+    if (pc.connectionState === "connected") { clearTimeout(call.drop); connected(); }
+    else if (pc.connectionState === "failed") failed();
+    else if (pc.connectionState === "disconnected") call.drop = setTimeout(() => { if (call?.pc === pc && pc.connectionState !== "connected") failed(); }, 8000);
+  };
+  return pc;
+}
+function connected() {
+  if (call.started) return;
+  clearTimeout(call.ring); call.started = Date.now();
+  callUI("Connected", { mute: true, time: true });
+  call.tick = setInterval(() => { const t = Math.floor((Date.now() - call.started) / 1000); $("callTime").textContent = String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }, 500);
+}
+function teardown() {
+  if (!call) return;
+  clearTimeout(call.ring); clearTimeout(call.drop); clearInterval(call.tick);
+  call.unsub?.(); call.pc?.close(); call.stream?.getTracks().forEach(t => t.stop());
+  $("callAudio").srcObject = null; call.unsub = call.pc = call.stream = null;
+}
+const callDoc = () => doc(db, "calls", call.role === "caller" ? call.other : me.uid);
+function finish(msg, retry = false) {
+  if (!call || call.dead) return;
+  teardown(); deleteDoc(callDoc()).catch(() => {});
+  call.dead = true; inCall = false;
+  callUI(msg, { retry: retry && call.role === "caller", end: "Close" });
+}
+function closeCall() { teardown(); call = null; inCall = false; $("callBox").hidden = true; }
+function hangup() {
+  if (!call) return;
+  if (call.dead) return closeCall();
+  if (call.role === "callee" && !call.accepted) updateDoc(callDoc(), { status: "declined" }).catch(() => {});
+  else deleteDoc(callDoc()).catch(() => {});
+  closeCall();
+}
+const failed = () => finish(call?.role === "caller" ? "Couldn't connect. Try again." : "Couldn't connect. Ask them to call again.", true);
+function callError(e) {
+  if (isQuota(e)) { closeCall(); return banner(); }
+  const msg = e.message === "busy" ? "They are busy right now. Try again later." : /microphone|supported/.test(e.message) ? e.message : "Couldn't connect. Try again.";
+  console.error(e); finish(msg, true);
+}
+async function startCall(chat, other, user) {
+  if (call && !call.dead) return;
+  if (call) closeCall();
+  call = { role: "caller", chat, other, user }; inCall = true;
+  showCall(user, "Starting voice call...", { end: "Cancel" });
+  try {
+    call.stream = await mic();
+    const pc = call.pc = peer(call.stream);
+    await pc.setLocalDescription(await pc.createOffer());
+    await iceDone(pc);
+    const ref = doc(db, "calls", other), data = { caller: me.uid, callee: other, status: "ringing", offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp }, at: serverTimestamp() };
+    try { await setDoc(ref, data); }
+    catch (e) {
+      if (e.code !== "permission-denied") throw e;
+      await deleteDoc(ref).catch(() => {});
+      await setDoc(ref, data).catch(() => { throw new Error("busy"); });
+    }
+    if (!call || call.pc !== pc) return;
+    call.unsub = onSnapshot(ref, async s => {
+      if (!call || call.pc !== pc || call.dead) return;
+      const d = s.data();
+      if (!s.exists()) { if (call.answered) finish("Call ended."); return; }
+      if (d.caller !== me.uid) return finish("They took another call.", true);
+      if (d.status === "declined") return finish("Call declined.");
+      if (d.status === "busy") return finish("They are on another call. Try again later.", true);
+      if (d.status === "accepted" && d.answer && !call.answered) {
+        call.answered = true; clearTimeout(call.ring); callUI("Connecting...", { end: "Cancel" });
+        call.ring = setTimeout(() => { if (call?.pc === pc && !call.started) failed(); }, 20000);
+        try { await pc.setRemoteDescription(d.answer); } catch (e) { callError(e); }
+      }
+    }, callError);
+    callUI("Calling... voice only", { end: "Cancel" });
+    call.ring = setTimeout(() => { if (call?.pc === pc && !call.answered) finish("No answer. Try again.", true); }, 45000);
+  } catch (e) { callError(e); }
+}
+function callWatch() {
+  stops.push(onSnapshot(doc(db, "calls", me.uid), async s => {
+    if (!s.exists()) {
+      if (call?.role === "callee" && !call.dead) { if (call.accepted) finish("Call ended."); else { closeCall(); } }
+      return;
+    }
+    const d = s.data();
+    if (d.caller === me.uid || d.status !== "ringing") return;
+    if (Date.now() - (d.at?.toMillis?.() ?? Date.now()) > 60000) return;
+    if (!links.some(l => l.id === pair(d.caller) && l.status === "accepted")) return;
+    if (call && !call.dead) { if (call.role === "callee" && call.other === d.caller && !call.accepted) call.offer = d.offer; else updateDoc(s.ref, { status: "busy" }).catch(() => {}); return; }
+    const user = await getUser(d.caller);
+    if (!user || user.suspended) return;
+    if (call && !call.dead) return;
+    if (call) closeCall();
+    call = { role: "callee", other: d.caller, user, offer: d.offer, accepted: false }; inCall = true;
+    showCall(user, "Incoming voice call", { answer: true, end: "Decline" });
+    navigator.vibrate?.([300, 200, 300]);
+    call.ring = setTimeout(() => { if (call && !call.accepted && !call.dead) hangup(); }, 50000);
+  }, () => {}));
+}
+$("call").onclick = () => { if (current && chatUser) startCall(current, current.split("_").find(x => x !== me.uid), chatUser); };
+$("callEnd").onclick = hangup;
+$("callRetry").onclick = () => { const { chat, other, user } = call; closeCall(); startCall(chat, other, user); };
+$("callMute").onclick = () => {
+  const t = call?.stream?.getAudioTracks()[0]; if (!t) return;
+  t.enabled = !t.enabled; $("callMute").textContent = t.enabled ? "Mute" : "Unmute";
+};
+$("callAnswer").onclick = async () => {
+  if (!call || call.role !== "callee" || call.accepted) return;
+  clearTimeout(call.ring); call.accepted = true; callUI("Connecting...", { end: "Cancel" });
+  try {
+    call.stream = await mic();
+    const pc = call.pc = peer(call.stream);
+    await pc.setRemoteDescription(call.offer);
+    await pc.setLocalDescription(await pc.createAnswer());
+    await iceDone(pc);
+    await updateDoc(doc(db, "calls", me.uid), { status: "accepted", answer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+    call.ring = setTimeout(() => { if (call?.pc === pc && !call.started) failed(); }, 20000);
+  } catch (e) { callError(e); }
+};
+addEventListener("pagehide", () => { if (call && !call.dead) hangup(); });

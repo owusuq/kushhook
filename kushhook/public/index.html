@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Kushhook</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap">
-<link rel="stylesheet" href="styles.css?v=1795748695147">
+<link rel="stylesheet" href="styles.css?v=1795749984408">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#f6f3fc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151220" media="(prefers-color-scheme: dark)">
@@ -19,6 +19,8 @@
   <symbol id="i-feed" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3.5"/><path d="M7 9h10M7 13h10M7 17h6"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M16 8l4 4-4 4M20 12H9"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01" stroke-width="3.2"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
@@ -46,6 +48,7 @@
     <button>Create profile</button>
   </form>
   <p id="error" role="alert"></p>
+  <footer class="credit"><span>Developed by <b>Kwadjo Owusu-Ansah Quarshie</b></span><span>Kushhook is still in maintenance. Some things may change or be slow.</span></footer>
 </main>
 
 <div id="app" hidden>
@@ -74,15 +77,20 @@
       </form>
       <div id="posts"></div>
     </section>
+    <footer class="credit"><span>Developed by <b>Kwadjo Owusu-Ansah Quarshie</b></span><span>Kushhook is still in maintenance. Some things may change or be slow.</span></footer>
   </aside>
   <article id="chat">
     <header>
       <button id="back" class="icon" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
       <b id="who">Choose a chat</b>
-      <button id="lock" class="icon" aria-label="Check encryption" title="Encryption" hidden><svg class="ic"><use href="#i-lock"/></svg></button>
-      <button id="clear" class="icon" aria-label="Clear chat" title="Clear chat" hidden><svg class="ic"><use href="#i-trash"/></svg></button>
-      <button id="report" class="icon" aria-label="Report this person" title="Report" hidden><svg class="ic"><use href="#i-flag"/></svg></button>
-      <button id="block" class="icon" aria-label="Block" title="Block" hidden><svg class="ic"><use href="#i-block"/></svg></button>
+      <button id="call" class="icon" aria-label="Voice call (voice only)" title="Voice call only" hidden><svg class="ic"><use href="#i-phone"/></svg></button>
+      <button id="more" class="icon" aria-label="More options" aria-expanded="false" hidden><svg class="ic"><use href="#i-more"/></svg></button>
+      <div id="chatMenu" hidden>
+        <button id="lock" type="button" hidden>Check encryption</button>
+        <button id="clear" type="button" hidden>Clear chat</button>
+        <button id="report" type="button" hidden>Report</button>
+        <button id="block" type="button" class="warn" hidden>Block</button>
+      </div>
     </header>
     <div id="messages"></div>
     <form id="send" hidden>
@@ -102,6 +110,8 @@
       <label>Username<input id="newName" pattern="[a-z0-9_]{3,20}" maxlength="20" autocapitalize="none" autocomplete="off" required></label>
       <small id="nameHint"></small>
       <label>About you<textarea id="bio" maxlength="140" rows="2" placeholder="A line about you (optional)"></textarea></label>
+      <b>Text size</b>
+      <div class="actions sizer"><button type="button" id="smaller" class="ghost" aria-label="Smaller text">A−</button><span id="sizeNow">100%</span><button type="button" id="bigger" class="ghost" aria-label="Bigger text">A+</button></div>
       <b>Colour</b><div id="colors" class="pick"></div>
       <b>Avatar</b><div id="symbols" class="pick"></div>
       <p id="profileError" role="alert"></p>
@@ -120,6 +130,22 @@
     </form>
   </dialog>
 </div>
+<div id="callBox" role="dialog" aria-modal="true" aria-label="Voice call" hidden>
+  <div class="callcard">
+    <small class="only">Voice call only. No video.</small>
+    <div id="callAvatar"></div>
+    <h2 id="callName"></h2>
+    <p id="callState"></p>
+    <p id="callTime" hidden></p>
+    <div class="callbtns">
+      <button type="button" id="callAnswer" hidden>Answer</button>
+      <button type="button" id="callMute" class="ghost" hidden>Mute</button>
+      <button type="button" id="callRetry" hidden>Try again</button>
+      <button type="button" id="callEnd" class="danger">End call</button>
+    </div>
+  </div>
+  <audio id="callAudio" autoplay playsinline></audio>
+</div>
 <script>
 (function () {
   try {
@@ -136,7 +162,7 @@
   } catch (e) {}
 })();
 </script>
-<script type="module" src="app.js?v=1795748695147"></script>
+<script type="module" src="app.js?v=1795749984408"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>

@@ -48,6 +48,22 @@ service cloud.firestore {
         && request.resource.data.suspended is bool;
       allow delete: if signedIn() && (id == uid() || isAdmin());
     }
+    match /calls/{callee} {
+      // Voice calls: one small setup note per person being called. The audio itself never touches Firebase.
+      allow get: if member() && (callee == uid() || resource.data.caller == uid());
+      allow create: if member() && callee != uid() && friendsWith(callee)
+        && request.resource.data.keys().hasOnly(['caller','callee','status','offer','at'])
+        && request.resource.data.caller == uid() && request.resource.data.callee == callee
+        && request.resource.data.status == 'ringing' && request.resource.data.at == request.time
+        && request.resource.data.offer.sdp is string && request.resource.data.offer.sdp.size() < 20000;
+      allow update: if member() && (callee == uid() || resource.data.caller == uid())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','answer'])
+        && request.resource.data.status in ['accepted','declined','busy']
+        && (callee == uid() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        && (!('answer' in request.resource.data) || request.resource.data.answer.sdp.size() < 20000);
+      allow delete: if member() && (callee == uid() || resource.data.caller == uid()
+        || request.time > resource.data.at + duration.value(2, 'm'));
+    }
     match /banned/{id} {
       // Suspended or removed accounts. Only admins write here; a person can see only their own entry.
       allow get: if signedIn() && (id == uid() || isAdmin());
