@@ -1,11 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, limitToLast, startAt, endAt, onSnapshot, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, limitToLast, startAt, endAt, startAfter, onSnapshot, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
 const fb = initializeApp(firebaseConfig), auth = getAuth(fb), db = getFirestore(fb);
 const $ = id => document.getElementById(id);
-let me, profile, admin = false, current, links = [], stops = [], stopChat;
+let me, profile, admin = false, current, chatUser, openClear, links = [], stops = [], stopChat;
 const users = {};
 const fail = e => { console.error(e); alert("That didn't work. " + e.message); };
 const el = (tag, text = "", cls = "") => Object.assign(document.createElement(tag), { textContent: text, className: cls });
@@ -46,11 +46,12 @@ $("setup").onsubmit = async e => {
 async function start() {
   $("auth").hidden = true; $("app").hidden = false;
   admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
-  if (admin) $("type").add(new Option("Bet odds (18+)", "odds"));
+  if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
-    await drawChats(); search();
+    await drawChats(); search(); if (admin) drawMembers();
     if (current && !links.some(l => l.id === current && l.status === "accepted")) closeChat();
+    else if (current && links.find(l => l.id === current)?.clear?.[me.uid]?.toMillis?.() !== openClear) openChat(current, chatUser);
   }, fail));
   stops.push(onSnapshot(query(collection(db, "posts"), orderBy("at", "desc"), limit(50)), s => {
     $("posts").replaceChildren(...s.docs.map(d => {
@@ -95,17 +96,27 @@ let timer;
 $("search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => search().catch(fail), 300); };
 
 function openChat(id, u) {
-  stopChat?.(); current = id;
-  $("who").textContent = u.name; $("send").hidden = $("block").hidden = false; $("app").classList.add("open");
-  stopChat = onSnapshot(query(collection(db, "friends", id, "messages"), orderBy("at"), limitToLast(100)), s => {
-    $("messages").replaceChildren(...s.docs.map(d => rich(el("div", "", "bubble" + (d.data().from === me.uid ? " me" : "")), d.data().text)));
+  stopChat?.(); current = id; chatUser = u;
+  const cleared = links.find(l => l.id === id)?.clear?.[me.uid];
+  openClear = cleared?.toMillis?.();
+  $("who").textContent = u.name; $("send").hidden = $("block").hidden = $("clear").hidden = false; $("app").classList.add("open");
+  const msgs = collection(db, "friends", id, "messages");
+  const q = cleared ? query(msgs, orderBy("at"), startAfter(cleared), limitToLast(100)) : query(msgs, orderBy("at"), limitToLast(100));
+  stopChat = onSnapshot(q, s => {
+    $("messages").replaceChildren(...s.docs.map(d => {
+      const m = d.data(), mine = m.from === me.uid, bubble = rich(el("div", "", "bubble" + (mine ? " me" : "")), m.text);
+      if (mine || admin) bubble.append("\n", button("Delete", () => confirm("Delete this message for everyone?") && deleteDoc(d.ref)));
+      bubble.lastChild.className = "del";
+      return bubble;
+    }));
     $("messages").scrollTop = $("messages").scrollHeight;
   }, fail);
 }
 function closeChat() {
   stopChat?.(); current = null; $("messages").replaceChildren(); $("who").textContent = "Choose a chat";
-  $("send").hidden = $("block").hidden = true; $("app").classList.remove("open");
+  $("send").hidden = $("block").hidden = $("clear").hidden = true; $("app").classList.remove("open");
 }
+$("clear").onclick = () => confirm("Clear this chat for you? The other person keeps their copy.") && updateDoc(doc(db, "friends", current), { ["clear." + me.uid]: serverTimestamp() }).catch(fail);
 $("back").onclick = () => $("app").classList.remove("open");
 $("block").onclick = () => confirm("Block this person?") && updateDoc(doc(db, "friends", current), { status: "blocked", blockedBy: me.uid }).catch(fail);
 $("send").onsubmit = e => {
@@ -129,5 +140,25 @@ $("postForm").onsubmit = e => {
 function tab(name) {
   for (const b of document.querySelectorAll("nav button")) { b.classList.toggle("on", b.dataset.tab === name); $(b.dataset.tab).hidden = b.dataset.tab !== name; }
   if (name === "people") search().catch(fail);
+  if (name === "admin") loadMembers().catch(fail);
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => tab(b.dataset.tab));
+
+let allUsers = [];
+async function loadMembers() {
+  const s = await getDocs(query(collection(db, "users"), orderBy("username"), limit(300)));
+  allUsers = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  drawMembers();
+}
+function drawMembers() {
+  const term = $("adminSearch").value.trim().toLowerCase().replace(/^@/, "");
+  const list = allUsers.filter(u => u.id !== me.uid && (u.username.includes(term) || u.nameLower.includes(term)));
+  $("members").replaceChildren(el("p", `${allUsers.length} members`), ...list.map(u => {
+    const row = el("div", "", "row"), link = links.find(l => l.id === pair(u.id));
+    row.append(el("span", `${u.name} (@${u.username})`));
+    if (link) row.append(el("small", link.status === "accepted" ? "Connected" : link.status === "pending" ? "Pending" : "Blocked"));
+    else row.append(button("Connect", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: "accepted" })));
+    return row;
+  }));
+}
+$("adminSearch").oninput = drawMembers;

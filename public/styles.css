@@ -27,3 +27,4 @@ a{color:inherit}
 #msg{flex:1;min-width:0}#emojis{width:100%}#emojis button{background:none;padding:4px 8px;font-size:24px}
 #back{display:none}
 @media(max-width:700px){#app{grid-template-columns:100%}#chat{display:none}#app.open aside{display:none}#app.open #chat{display:flex}#back{display:block}}
+.del{min-height:28px;padding:2px 10px;font-size:12px;background:none;color:inherit;border:1px solid #8886;margin-top:4px}

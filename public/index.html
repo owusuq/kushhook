@@ -23,9 +23,10 @@
 <div id="app" hidden>
   <aside>
     <header><b class="logo small">Kush<span>hook</span></b><button id="logout" class="ghost">Sign out</button></header>
-    <nav><button data-tab="chats">Chats</button><button data-tab="people">People</button><button data-tab="feed">Feed</button></nav>
+    <nav><button data-tab="chats">Chats</button><button data-tab="people">People</button><button data-tab="feed">Feed</button><button data-tab="admin" id="adminTab" hidden>Admin</button></nav>
     <section id="chats"></section>
     <section id="people" hidden><input id="search" placeholder="Search name or username"><div id="results"></div></section>
+    <section id="admin" hidden><input id="adminSearch" placeholder="Filter members"><div id="members"></div></section>
     <section id="feed" hidden>
       <form id="postForm">
         <select id="type"><option value="link">Link or update</option></select>
@@ -36,7 +37,7 @@
     </section>
   </aside>
   <article id="chat">
-    <header><button id="back" class="ghost">Back</button><b id="who">Choose a chat</b><button id="block" class="ghost" hidden>Block</button></header>
+    <header><button id="back" class="ghost">Back</button><b id="who">Choose a chat</b><button id="clear" class="ghost" hidden>Clear chat</button><button id="block" class="ghost" hidden>Block</button></header>
     <div id="messages"></div>
     <form id="send" hidden>
       <div id="emojis"></div>
