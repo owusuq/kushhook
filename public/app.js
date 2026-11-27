@@ -172,6 +172,7 @@ $("setup").onsubmit = async e => {
 async function start() {
   $("auth").hidden = true; $("app").hidden = false;
   admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
+  $("postForm").hidden = !admin;
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
   if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
   loadRead(); await setupKeys().catch(fail); beat();
@@ -405,11 +406,23 @@ async function drawReports() {
 }
 let allUsers = [];
 let removed = [];
+let adminIds = new Set();
+const isOwner = () => me.email === "daakyehenefoundation@gmail.com";
 async function loadMembers() {
   const s = await getDocs(query(collection(db, "users"), orderBy("username"), limit(1000)));
   allUsers = s.docs.map(d => ({ id: d.id, ...d.data() }));
   removed = (await getDocs(collection(db, "banned")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.kind === "removed");
+  adminIds = new Set((await getDocs(collection(db, "admins")).catch(() => ({ docs: [] }))).docs.map(d => d.id));
   drawMembers();
+}
+// Make or remove an admin.
+async function setAdmin(u, on) {
+  if (!confirm(on ? `Make @${u.username} an admin? They can post links, remove posts and manage members.` : `Remove admin from @${u.username}?`)) return;
+  try {
+    if (on) await setDoc(doc(db, "admins", u.id), { at: serverTimestamp(), by: me.uid }); else await deleteDoc(doc(db, "admins", u.id));
+    if (on) adminIds.add(u.id); else adminIds.delete(u.id);
+    drawMembers();
+  } catch (e) { fail(e); }
 }
 // Suspend: hidden from everyone and locked out until you restore them.
 async function setSuspended(u, on) {
@@ -437,10 +450,13 @@ function drawMembers() {
   $("members").replaceChildren(el("p", `${allUsers.length} members${off ? ` · ${off} suspended` : ""}`, "count"), ...list.map(u => {
     const row = el("div", "", "row" + (u.suspended ? " off" : "")), link = links.find(l => l.id === pair(u.id));
     row.append(avatar(u), nameBlock(u, true));
+    if (adminIds.has(u.id)) row.append(el("small", "Admin", "isadmin"));
     if (u.suspended) row.append(el("small", "Suspended", "tag"));
     else if (link) row.append(el("small", link.status === "accepted" ? "Connected" : link.status === "pending" ? "Pending" : "Blocked"));
     else row.append(button("Connect", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: "accepted" })));
     const foot = el("div", "", "foot");
+    if (!adminIds.has(u.id)) foot.append(button("Make admin", () => setAdmin(u, true)));
+    else if (isOwner()) foot.append(Object.assign(button("Remove admin", () => setAdmin(u, false)), { className: "ghost" }));
     foot.append(u.suspended ? button("Restore", () => setSuspended(u, false)) : Object.assign(button("Suspend", () => setSuspended(u, true)), { className: "ghost" }),
       Object.assign(button("Remove", () => removeMember(u)), { className: "danger" }));
     row.append(foot);

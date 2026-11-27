@@ -265,3 +265,71 @@ aside>.credit{flex:none;order:1}
 .themer{display:flex;gap:8px;justify-content:center;margin:6px 0 10px}
 .themer button{min-width:78px}
 .themer button.on{background:var(--btn);color:#fff}
+
+.isadmin{color:var(--brand);font-weight:700}
+
+/* ============ Fit every screen ============
+   Small phones, landscape, tablets, big monitors, notches and foldables. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow:hidden;overscroll-behavior:none}
+section,#messages{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+img,video{max-width:100%}
+@supports not (height:100dvh){#app{height:100vh}}
+#app{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+.logo{font-size:clamp(44px,15vw,64px)}
+.logo.small{font-size:26px}
+.center{overflow-y:auto}
+#posts:empty::before{content:"No posts yet. Updates from the admin show here.";display:block;text-align:center;color:var(--muted);padding:34px 12px}
+
+/* all phones */
+@media(max-width:700px){
+  .bubble{max-width:86%}
+  .media img,.media video{width:min(240px,68vw)}
+  #chatMenu{right:8px;max-width:calc(100vw - 16px)}
+}
+
+/* small phones */
+@media(max-width:380px){
+  header{padding-left:10px;padding-right:10px}
+  section,#messages{padding-left:10px;padding-right:10px}
+  nav{left:8px;right:8px}
+  nav button{font-size:10.5px;padding:6px 1px}
+  nav .ic{width:20px;height:20px}
+  .row{padding:9px 10px;gap:8px}
+  .row button{padding:6px 12px}
+  .icon{width:38px;height:38px}
+  #emojis button{font-size:21px;padding:3px 6px}
+  .callbtns button{min-width:92px}
+  dialog{padding:18px}
+}
+
+/* tablets and small laptops: narrower list so the chat gets room */
+@media(min-width:701px) and (max-width:1000px){
+  #app{grid-template-columns:minmax(290px,340px) 1fr}
+}
+
+/* big screens: keep reading width comfortable and centred */
+@media(min-width:1100px){
+  #app{grid-template-columns:minmax(340px,420px) 1fr}
+  #messages{padding-left:max(18px,calc((100% - 820px)/2));padding-right:max(18px,calc((100% - 820px)/2))}
+  #send{padding-left:max(12px,calc((100% - 840px)/2));padding-right:max(12px,calc((100% - 840px)/2))}
+}
+@media(min-width:1500px){.bubble{max-width:62%}}
+
+/* short screens (phones on their side, small windows) */
+@media(max-height:520px){
+  :root{--hh:calc(52px + env(safe-area-inset-top))}
+  #me .avatar{width:36px;height:36px;font-size:18px}
+  aside>.credit,#auth .credit{display:none}
+  .center{justify-content:flex-start;padding-top:16px}
+  .logo:not(.small){font-size:40px}
+  #send{padding-top:6px;padding-bottom:max(6px,env(safe-area-inset-bottom))}
+  .callcard{padding:16px;gap:4px}
+  .callbtns{margin-top:8px}
+}
+@media(max-width:700px) and (max-height:520px){
+  nav{height:54px;bottom:calc(6px + env(safe-area-inset-bottom))}
+  aside>section{padding-bottom:calc(54px + 24px + env(safe-area-inset-bottom))}
+}
+
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
