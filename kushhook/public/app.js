@@ -7,7 +7,18 @@ const fb = initializeApp(firebaseConfig), auth = getAuth(fb), db = getFirestore(
 const $ = id => document.getElementById(id);
 let me, profile, admin = false, current, chatUser, openClear, links = [], stops = [], stopChat;
 const users = {};
-const fail = e => { console.error(e); alert("That didn't work. " + e.message); };
+const isQuota = e => e?.code === "resource-exhausted" || /quota/i.test(e?.message || "");
+function banner() {
+  if (document.getElementById("quotaBanner")) return;
+  const b = document.createElement("div"); b.id = "quotaBanner";
+  b.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#14213d;color:#fca311;padding:10px 12px;text-align:center;font:600 14px system-ui,sans-serif;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap";
+  const t = document.createElement("span"); t.textContent = "Kushhook is very busy right now. Please try again in a little while.";
+  const r = document.createElement("button"); r.textContent = "Try again"; r.onclick = () => location.reload();
+  r.style.cssText = "background:#fca311;color:#14213d;border:0;border-radius:8px;padding:6px 12px;font-weight:700";
+  b.append(t, r); document.body.append(b);
+}
+const fail = e => { console.error(e); if (isQuota(e)) return banner(); alert("That didn't work. " + e.message); };
+addEventListener("unhandledrejection", ev => { if (isQuota(ev.reason)) { ev.preventDefault(); banner(); } });
 const el = (tag, text = "", cls = "") => Object.assign(document.createElement(tag), { textContent: text, className: cls });
 const button = (text, fn) => { const b = el("button", text); b.onclick = () => Promise.resolve(fn()).catch(fail); return b; };
 // Safe links: text is never treated as HTML
@@ -497,9 +508,12 @@ const urls = {};
 const setStatus = t => $("status").textContent = t;
 const clearUrls = () => { for (const k in urls) { urls[k].then(u => URL.revokeObjectURL(u)).catch(() => {}); delete urls[k]; } };
 // Photos, videos and files are temporary: removed from the database when the chat is closed
+// Files vanish 10 minutes after sending (and when the chat closes), so they never fill the free storage.
+const FILE_TTL = 10 * 60 * 1000;
 async function removeMessage(mr, m) {
   const batch = writeBatch(db);
-  if (m.path) (await getDocs(collection(db, mr.path, "chunks"))).forEach(c => batch.delete(c.ref));
+  if (m.path && m.parts) for (let i = 0; i < m.parts; i++) batch.delete(doc(db, mr.path, "chunks", String(i).padStart(3, "0")));
+  else if (m.path) (await getDocs(collection(db, mr.path, "chunks"))).forEach(c => batch.delete(c.ref));
   batch.delete(mr);
   await batch.commit();
 }
@@ -559,13 +573,11 @@ async function shrinkVideo(f) {
   await conversion.execute();
   return new Blob([output.target.buffer], { type: "video/mp4" });
 }
-const allowed = ["application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
 async function sendFile(chat, f) {
   if (!ckey) throw new Error(`${chatUser.name} hasn't turned on encryption yet.`);
-  let blob = f, kind = "file", type = f.type, name = f.name;
+  let blob = f, kind = "file", type = f.type || "application/octet-stream", name = f.name;
   if (f.type.startsWith("image/")) { setStatus("Preparing photo..."); blob = await shrinkImage(f); kind = "image"; type = "image/jpeg"; name = name.replace(/\.[^.]+$/, "") + ".jpg"; }
   else if (f.type.startsWith("video/")) { blob = await shrinkVideo(f); kind = "video"; type = "video/mp4"; name = name.replace(/\.[^.]+$/, "") + ".mp4"; }
-  else if (!allowed.includes(f.type)) throw new Error("You can send photos, videos, PDF, Word and text files.");
   else if (f.size > 5 * 1024 * 1024) throw new Error("Files must be under 5 MB.");
   if (blob.size > 25 * 1024 * 1024) throw new Error("That file is still too big after shrinking.");
   setStatus("Encrypting and uploading...");
@@ -575,11 +587,18 @@ async function sendFile(chat, f) {
   for (let i = 0; i < parts; i++) await setDoc(doc(db, mref.path, "chunks", String(i).padStart(3, "0")), { d: Bytes.fromUint8Array(bytes.subarray(i * size, (i + 1) * size)), by: me.uid });
   await setDoc(mref, { from: me.uid, text: meta, at: serverTimestamp(), e: 1, kind, path, name: "", type: "application/octet-stream", parts });
   setStatus("");
+  setTimeout(() => removeMessage(mref, { path, parts }).catch(e => console.error(e)), FILE_TTL);
 }
 $("attach").onclick = () => $("file").click();
 $("file").onchange = async () => {
   const f = $("file").files[0]; $("file").value = "";
   if (!f || !current) return;
+  // check the size first, before any shrinking, so a big file never slows the app
+  const MB = 1024 * 1024, limit = f.type.startsWith("image/") ? 15 : f.type.startsWith("video/") ? 30 : 5;
+  if (f.size > limit * MB) {
+    const what = limit === 15 ? "Photos" : limit === 30 ? "Videos" : "Files";
+    return alert(`This file is too big (${(f.size / MB).toFixed(1)} MB). ${what} must be ${limit} MB or smaller. Please pick a smaller one.`);
+  }
   try { await sendFile(current, f); }
-  catch (e) { console.error(e); setStatus(e.code === "permission-denied" ? "Upload failed. Publish the latest firestore.rules." : e.message); }
+  catch (e) { console.error(e); if (isQuota(e)) { setStatus(""); return banner(); } setStatus(e.code === "permission-denied" ? "Upload failed. Publish the latest firestore.rules." : e.message); }
 };
