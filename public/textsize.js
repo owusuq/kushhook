@@ -65,8 +65,8 @@
     }
     var side = document.querySelector("aside > header"), out = document.getElementById("logout");
     if (side && out) side.insertBefore(makeButton(), out);
-    var top = document.querySelector("#chat > header"), lock = document.getElementById("lock");
-    if (top && lock) top.insertBefore(makeButton(), lock);
+    var top = document.querySelector("#chat > header"), more = document.getElementById("more");
+    if (top && more) top.insertBefore(makeButton(), more);
 
     function set(v) {
       size = v; root.style.setProperty("--ts", String(v / 100)); range.value = v; label.textContent = v + "%";
