@@ -48,6 +48,22 @@ service cloud.firestore {
         && request.resource.data.suspended is bool;
       allow delete: if signedIn() && (id == uid() || isAdmin());
     }
+    match /calls/{callee} {
+      // Voice calls: one small setup note per person being called. The audio itself never touches Firebase.
+      allow get: if member() && (callee == uid() || resource.data.caller == uid());
+      allow create: if member() && callee != uid() && friendsWith(callee)
+        && request.resource.data.keys().hasOnly(['caller','callee','status','offer','at'])
+        && request.resource.data.caller == uid() && request.resource.data.callee == callee
+        && request.resource.data.status == 'ringing' && request.resource.data.at == request.time
+        && request.resource.data.offer.sdp is string && request.resource.data.offer.sdp.size() < 20000;
+      allow update: if member() && (callee == uid() || resource.data.caller == uid())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','answer'])
+        && request.resource.data.status in ['accepted','declined','busy']
+        && (callee == uid() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        && (!('answer' in request.resource.data) || request.resource.data.answer.sdp.size() < 20000);
+      allow delete: if member() && (callee == uid() || resource.data.caller == uid()
+        || request.time > resource.data.at + duration.value(2, 'm'));
+    }
     match /banned/{id} {
       // Suspended or removed accounts. Only admins write here; a person can see only their own entry.
       allow get: if signedIn() && (id == uid() || isAdmin());
@@ -146,17 +162,33 @@ service cloud.firestore {
         && request.resource.data.at == request.time;
       allow read, delete: if isAdmin();
     }
+    match /settings/{id} {
+      allow read: if member();
+      allow create, update: if isAdmin() && id == 'app'
+        && request.resource.data.keys().hasOnly(['peopleHidden'])
+        && request.resource.data.peopleHidden is bool;
+    }
     match /posts/{p} {
       allow read: if member();
       allow create: if member() && isAdmin()
-        && request.resource.data.keys().hasOnly(['uid','username','type','text','at'])
+        && request.resource.data.keys().hasOnly(['uid','username','type','text','at','link','likes'])
         && request.resource.data.uid == uid()
         && request.resource.data.username == get(path_('users', uid())).data.username
         && request.resource.data.type in ['link','odds']
         && (request.resource.data.type == 'link' || isAdmin())
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
-        && request.resource.data.at == request.time;
+        && request.resource.data.at == request.time
+        && (!('link' in request.resource.data) || (request.resource.data.link is string
+            && request.resource.data.link.size() <= 500 && request.resource.data.link.matches('^https?://.*')))
+        && request.resource.data.get('likes', []).size() == 0;
+      // Any member can like or unlike (adds or removes only their own id). Nothing else on a post can change.
+      allow update: if member()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        && request.resource.data.likes is list
+        && request.resource.data.likes.size() <= resource.data.get('likes', []).size() + 1
+        && request.resource.data.likes.toSet().difference(resource.data.get('likes', []).toSet()).hasOnly([uid()])
+        && resource.data.get('likes', []).toSet().difference(request.resource.data.likes.toSet()).hasOnly([uid()]);
       allow delete: if member() && (resource.data.uid == uid() || isAdmin());
     }
   }

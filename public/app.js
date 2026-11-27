@@ -1,13 +1,25 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, reauthenticateWithPopup } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, limitToLast, startAt, endAt, startAfter, onSnapshot, getDocs, writeBatch, serverTimestamp, Bytes, Timestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, limitToLast, startAt, endAt, startAfter, onSnapshot, getDocs, writeBatch, serverTimestamp, arrayUnion, arrayRemove, Bytes, Timestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
 const fb = initializeApp(firebaseConfig), auth = getAuth(fb), db = getFirestore(fb);
 const $ = id => document.getElementById(id);
+let peopleHidden = false;
 let me, profile, admin = false, current, chatUser, openClear, links = [], stops = [], stopChat;
 const users = {};
-const fail = e => { console.error(e); alert("That didn't work. " + e.message); };
+const isQuota = e => e?.code === "resource-exhausted" || /quota/i.test(e?.message || "");
+function banner() {
+  if (document.getElementById("quotaBanner")) return;
+  const b = document.createElement("div"); b.id = "quotaBanner";
+  b.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#14213d;color:#fca311;padding:10px 12px;text-align:center;font:600 14px system-ui,sans-serif;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap";
+  const t = document.createElement("span"); t.textContent = "Kushhook is very busy right now. Please try again in a little while.";
+  const r = document.createElement("button"); r.textContent = "Try again"; r.onclick = () => location.reload();
+  r.style.cssText = "background:#fca311;color:#14213d;border:0;border-radius:8px;padding:6px 12px;font-weight:700";
+  b.append(t, r); document.body.append(b);
+}
+const fail = e => { console.error(e); if (isQuota(e)) return banner(); alert("That didn't work. " + e.message); };
+addEventListener("unhandledrejection", ev => { if (isQuota(ev.reason)) { ev.preventDefault(); banner(); } });
 const el = (tag, text = "", cls = "") => Object.assign(document.createElement(tag), { textContent: text, className: cls });
 const button = (text, fn) => { const b = el("button", text); b.onclick = () => Promise.resolve(fn()).catch(fail); return b; };
 // Safe links: text is never treated as HTML
@@ -164,7 +176,9 @@ async function start() {
   if (admin) { $("type").add(new Option("Bet odds (18+)", "odds")); $("adminTab").hidden = false; }
   $("postForm").hidden = !admin; // only admins post to the feed; everyone else reads and taps links
   if (!admin) stops.push(onSnapshot(doc(db, "banned", me.uid), s => { if (s.exists()) { alert("Your account has been suspended."); signOut(auth).then(() => location.reload()); } }, () => {}));
+  stops.push(onSnapshot(doc(db, "settings", "app"), s => { peopleHidden = !!s.data()?.peopleHidden; applyPeople(); }, () => {}));
   loadRead(); await setupKeys().catch(fail); beat();
+  idleWatch(); callWatch();
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
     watchLatest(links.filter(l => l.status === "accepted").map(l => l.id));
@@ -178,12 +192,19 @@ async function start() {
       box.append(el("b", "@" + p.username), el("small", p.at?.toMillis ? clock(p.at.toMillis()) : "", "time"));
       if (p.type === "odds") box.append(el("span", "Bet odds, 18+ only\n", "odds")); else box.append("\n");
       rich(box, p.text);
-      const first = p.text.match(/https?:\/\/\S+/);
-      if (first) { box.classList.add("tap"); box.onclick = ev => { if (!ev.target.closest("a,button")) window.open(first[0], "_blank", "noopener,noreferrer"); }; }
+      const own = typeof p.link === "string" && /^https?:\/\/\S+$/i.test(p.link) ? p.link : null;
+      if (own) {
+        let host = own; try { host = new URL(own).hostname; } catch {}
+        box.append(Object.assign(el("a", "🔗 " + host, "plink"), { href: own, target: "_blank", rel: "noopener noreferrer" }));
+      }
+      const target = own || (p.text.match(/https?:\/\/\S+/) || [])[0];
+      if (target) { box.classList.add("tap"); box.onclick = ev => { if (!ev.target.closest("a,button")) window.open(target, "_blank", "noopener,noreferrer"); }; }
       const foot = el("div", "", "foot");
+      const likes = Array.isArray(p.likes) ? p.likes : [], liked = likes.includes(me.uid);
+      foot.append(Object.assign(button((liked ? "♥ " : "♡ ") + likes.length, () => updateDoc(d.ref, { likes: liked ? arrayRemove(me.uid) : arrayUnion(me.uid) })), { className: "del like" + (liked ? " on" : "") }));
       if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
       if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
-      if (foot.childNodes.length) box.append(foot);
+      box.append(foot);
       return box;
     }));
   }, fail));
@@ -221,7 +242,8 @@ async function drawChats() {
   const all = found.filter(x => x.u && !x.u.suspended), card = ({ l, u }, ...btns) => { const row = el("div", "", "row"); row.append(avatar(u), nameBlock(u, l.status === "pending"), ...btns); return row; };
   const ghost = (text, fn) => Object.assign(button(text, fn), { className: "ghost" });
   const chats = all.filter(x => x.l.status === "accepted").sort((a, b) => (latest[b.l.id]?.at || 0) - (latest[a.l.id]?.at || 0)).map(x => {
-    const r = card(x, button("Open", () => openChat(x.l.id, x.u))), m = latest[x.l.id];
+    const open = () => openChat(x.l.id, x.u), r = card(x, button("Open", open)), m = latest[x.l.id];
+    r.classList.add("tap"); r.onclick = ev => { if (!ev.target.closest("button,a")) open(); };
     if (m) r.querySelector(".pname").append(el("small", (m.from === me.uid ? "You · " : "") + clock(m.at), "when"));
     if (unread(x.l.id)) { r.classList.add("new"); r.querySelector(".pname b").append(el("i", "", "dot")); }
     return r;
@@ -257,13 +279,14 @@ async function search() {
     if (words.some(w => w.startsWith(term)) || words.map(w => w[0]).join("").startsWith(term)) return 2;
     return un.includes(term) || n.includes(term) ? 3 : -1;
   };
-  const list = all.filter(u => !u.suspended && u.id !== me.uid && !links.some(l => l.id === pair(u.id))).map(u => [rank(u), u]).filter(x => x[0] >= 0)
+  const list = all.filter(u => !u.suspended && u.id !== me.uid && links.find(l => l.id === pair(u.id))?.status !== "blocked").map(u => [rank(u), u]).filter(x => x[0] >= 0)
     .sort((a, b) => a[0] - b[0] || (a[1].nameLower || "").localeCompare(b[1].nameLower || "")).slice(0, 50);
   $("results").replaceChildren(
     ...(list.length ? [el("p", term ? `${list.length} found` : `${list.length} people`, "count")] : [el("p", term ? "No one matches that. Try fewer letters." : "No one to add yet.")]),
     ...list.map(([, u]) => {
       const row = el("div", "", "row");
-      row.append(avatar(u), nameBlock(u, true), button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
+      const l = links.find(x => x.id === pair(u.id));
+      row.append(avatar(u), nameBlock(u, true), l?.status === "accepted" ? button("Message", () => { document.querySelector('nav [data-tab="chats"]')?.click(); openChat(l.id, u); }) : l ? el("small", "Pending") : button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
       return row;
     }));
 }
@@ -277,8 +300,8 @@ function openChat(id, u) {
   const cleared = links.find(l => l.id === id)?.clear?.[me.uid];
   openClear = cleared?.toMillis?.();
   const label = el("span", "", "whotext"), pr = Object.assign(el("small", "", "presence"), { id: "presence" });
-  label.append(u.name, pr); $("who").replaceChildren(avatar(u), label);
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = false; $("app").classList.add("open"); markRead(id);
+  label.append(el("span", u.name, "wname"), pr); $("who").replaceChildren(avatar(u), label);
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("call").hidden = false; $("app").classList.add("open"); markRead(id);
   // wait for the other person's public key, then lock and unlock messages with the key you share
   const other = id.split("_").find(x => x !== me.uid); let first, done = false;
   ckey = null; partnerPub = null; lastSnap = null; seen = null; keyReady = new Promise(r => first = r);
@@ -320,7 +343,7 @@ async function render() {
 function closeChat() {
   stopChat?.(); stopKeys?.(); stopPresence?.(); typing(false); purgeMine(current); clearUrls(); current = null; ckey = null; lastSnap = null;
   $("messages").replaceChildren(); $("who").textContent = "Choose a chat"; setStatus("");
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = true; $("app").classList.remove("open");
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("call").hidden = true; $("chatMenu").hidden = true; $("app").classList.remove("open");
 }
 $("report").onclick = () => { const other = current.split("_").find(x => x !== me.uid); report("user", other, other, "users/" + other); };
 $("clear").onclick = () => confirm("Clear this chat for you? The other person keeps their copy.") && updateDoc(doc(db, "friends", current), { ["clear." + me.uid]: serverTimestamp() }).catch(fail);
@@ -359,11 +382,23 @@ for (const x of ["😀","😂","😍","😎","😢","🙏","👍","🔥","❤️
 }
 $("postForm").onsubmit = e => {
   e.preventDefault();
-  const text = $("postText").value.trim();
-  if (text) addDoc(collection(db, "posts"), { uid: me.uid, username: profile.username, type: $("type").value, text, at: serverTimestamp() })
-    .then(() => $("postText").value = "").catch(fail);
+  const text = $("postText").value.trim(), link = $("postLink").value.trim();
+  if (link && !/^https?:\/\/\S+$/i.test(link)) return alert("The link must start with http:// or https://");
+  if (!text) return;
+  const data = { uid: me.uid, username: profile.username, type: $("type").value, text, at: serverTimestamp(), likes: [] };
+  if (link) data.link = link;
+  addDoc(collection(db, "posts"), data).then(() => { $("postText").value = ""; $("postLink").value = ""; }).catch(fail);
 };
+function applyPeople() {
+  const off = peopleHidden && !admin;
+  document.querySelector('nav [data-tab="people"]').hidden = off;
+  if (off && !$("people").hidden) tab("chats");
+  $("peopleState").textContent = peopleHidden ? "Hidden from members. You still see it." : "Visible to everyone";
+  $("peopleToggle").textContent = peopleHidden ? "Show" : "Hide";
+}
+$("peopleToggle").onclick = () => setDoc(doc(db, "settings", "app"), { peopleHidden: !peopleHidden }).catch(fail);
 function tab(name) {
+  if (name === "people" && peopleHidden && !admin) name = "chats";
   for (const b of document.querySelectorAll("nav button")) { b.classList.toggle("on", b.dataset.tab === name); $(b.dataset.tab).hidden = b.dataset.tab !== name; }
   if (name === "people") search().catch(fail);
   if (name === "admin") loadMembers().catch(fail);
@@ -501,11 +536,25 @@ const urls = {};
 const setStatus = t => $("status").textContent = t;
 const clearUrls = () => { for (const k in urls) { urls[k].then(u => URL.revokeObjectURL(u)).catch(() => {}); delete urls[k]; } };
 // Photos, videos and files are temporary: removed from the database when the chat is closed
+// Files vanish 10 minutes after sending (and when the chat closes), so they never fill the free storage.
+const FILE_TTL = 10 * 60 * 1000;
 async function removeMessage(mr, m) {
   const batch = writeBatch(db);
-  if (m.path) (await getDocs(collection(db, mr.path, "chunks"))).forEach(c => batch.delete(c.ref));
+  if (m.path && m.parts) for (let i = 0; i < m.parts; i++) batch.delete(doc(db, mr.path, "chunks", String(i).padStart(3, "0")));
+  else if (m.path) (await getDocs(collection(db, mr.path, "chunks"))).forEach(c => batch.delete(c.ref));
   batch.delete(mr);
   await batch.commit();
+}
+// Auto logout after 10 min of no activity. Runs in the browser only, so it costs nothing.
+const IDLE_MS = 10 * 60 * 1000;
+let lastActive = Date.now(), idleOn = false;
+function idleWatch() {
+  if (idleOn) return; idleOn = true;
+  const touch = () => { lastActive = Date.now(); };
+  ["pointerdown", "keydown", "scroll", "touchstart"].forEach(e => addEventListener(e, touch, { passive: true }));
+  const check = () => { if (!inCall && Date.now() - lastActive > IDLE_MS) $("logout").click(); };
+  setInterval(check, 15000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
 }
 async function purgeMine(chat) {
   if (!chat) return;
@@ -568,11 +617,171 @@ async function sendFile(chat, f) {
   for (let i = 0; i < parts; i++) await setDoc(doc(db, mref.path, "chunks", String(i).padStart(3, "0")), { d: Bytes.fromUint8Array(bytes.subarray(i * size, (i + 1) * size)), by: me.uid });
   await setDoc(mref, { from: me.uid, text: meta, at: serverTimestamp(), e: 1, kind, path, name: "", type: "application/octet-stream", parts });
   setStatus("");
+  setTimeout(() => removeMessage(mref, { path, parts }).catch(e => console.error(e)), FILE_TTL);
 }
 $("attach").onclick = () => $("file").click();
 $("file").onchange = async () => {
   const f = $("file").files[0]; $("file").value = "";
   if (!f || !current) return;
+  // check the size first, before any shrinking, so a big file never slows the app
+  const MB = 1024 * 1024, limit = f.type.startsWith("image/") ? 15 : f.type.startsWith("video/") ? 30 : 5;
+  if (f.size > limit * MB) {
+    const what = limit === 15 ? "Photos" : limit === 30 ? "Videos" : "Files";
+    return alert(`This file is too big (${(f.size / MB).toFixed(1)} MB). ${what} must be ${limit} MB or smaller. Please pick a smaller one.`);
+  }
   try { await sendFile(current, f); }
-  catch (e) { console.error(e); setStatus(e.code === "permission-denied" ? "Upload failed. Publish the latest firestore.rules." : e.message); }
+  catch (e) { console.error(e); if (isQuota(e)) { setStatus(""); return banner(); } setStatus(e.code === "permission-denied" ? "Upload failed. Publish the latest firestore.rules." : e.message); }
 };
+
+// chat menu (clear, report, block)
+$("more").onclick = e => { e.stopPropagation(); const open = $("chatMenu").hidden; $("chatMenu").hidden = !open; $("more").setAttribute("aria-expanded", open); };
+$("chatMenu").onclick = () => { $("chatMenu").hidden = true; $("more").setAttribute("aria-expanded", false); };
+document.addEventListener("click", () => { $("chatMenu").hidden = true; });
+
+
+// ---------- voice calls (voice only) ----------
+// The audio goes straight between the two phones, so it uses none of your free Firebase limits.
+// Only a tiny "ringing" note is written to Firestore to set the call up. Both people need the app open.
+const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+let call = null, inCall = false;
+const iceDone = pc => new Promise(ok => {
+  if (pc.iceGatheringState === "complete") return ok();
+  const t = setTimeout(ok, 4000);
+  pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); ok(); } });
+});
+async function mic() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Calls are not supported in this browser.");
+  try { return await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+  catch { throw new Error("Please allow the microphone to make calls."); }
+}
+function callUI(state, o = {}) {
+  $("callBox").hidden = false; $("callState").textContent = state;
+  $("callAnswer").hidden = !o.answer; $("callMute").hidden = !o.mute; $("callRetry").hidden = !o.retry;
+  $("callEnd").textContent = o.end || "End call"; $("callTime").hidden = !o.time;
+}
+function showCall(user, state, o) {
+  const a = avatar(user); a.classList.add("big");
+  $("callAvatar").replaceChildren(a); $("callName").textContent = user.name; $("callMute").textContent = "Mute"; callUI(state, o);
+}
+function peer(stream) {
+  const pc = new RTCPeerConnection(ICE);
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+  pc.ontrack = e => { $("callAudio").srcObject = e.streams[0]; $("callAudio").play?.().catch(() => {}); };
+  pc.onconnectionstatechange = () => {
+    if (!call || call.pc !== pc) return;
+    if (pc.connectionState === "connected") { clearTimeout(call.drop); connected(); }
+    else if (pc.connectionState === "failed") failed();
+    else if (pc.connectionState === "disconnected") call.drop = setTimeout(() => { if (call?.pc === pc && pc.connectionState !== "connected") failed(); }, 8000);
+  };
+  return pc;
+}
+function connected() {
+  if (call.started) return;
+  clearTimeout(call.ring); call.started = Date.now();
+  callUI("Connected", { mute: true, time: true });
+  call.tick = setInterval(() => { const t = Math.floor((Date.now() - call.started) / 1000); $("callTime").textContent = String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }, 500);
+}
+function teardown() {
+  if (!call) return;
+  clearTimeout(call.ring); clearTimeout(call.drop); clearInterval(call.tick);
+  call.unsub?.(); call.pc?.close(); call.stream?.getTracks().forEach(t => t.stop());
+  $("callAudio").srcObject = null; call.unsub = call.pc = call.stream = null;
+}
+const callDoc = () => doc(db, "calls", call.role === "caller" ? call.other : me.uid);
+function finish(msg, retry = false) {
+  if (!call || call.dead) return;
+  teardown(); deleteDoc(callDoc()).catch(() => {});
+  call.dead = true; inCall = false;
+  callUI(msg, { retry: retry && call.role === "caller", end: "Close" });
+}
+function closeCall() { teardown(); call = null; inCall = false; $("callBox").hidden = true; }
+function hangup() {
+  if (!call) return;
+  if (call.dead) return closeCall();
+  if (call.role === "callee" && !call.accepted) updateDoc(callDoc(), { status: "declined" }).catch(() => {});
+  else deleteDoc(callDoc()).catch(() => {});
+  closeCall();
+}
+const failed = () => finish(call?.role === "caller" ? "Couldn't connect. Try again." : "Couldn't connect. Ask them to call again.", true);
+function callError(e) {
+  if (isQuota(e)) { closeCall(); return banner(); }
+  const msg = e.message === "busy" ? "They are busy right now. Try again later." : /microphone|supported/.test(e.message) ? e.message : "Couldn't connect. Try again.";
+  console.error(e); finish(msg, true);
+}
+async function startCall(chat, other, user) {
+  if (call && !call.dead) return;
+  if (call) closeCall();
+  call = { role: "caller", chat, other, user }; inCall = true;
+  showCall(user, "Starting voice call...", { end: "Cancel" });
+  try {
+    call.stream = await mic();
+    const pc = call.pc = peer(call.stream);
+    await pc.setLocalDescription(await pc.createOffer());
+    await iceDone(pc);
+    const ref = doc(db, "calls", other), data = { caller: me.uid, callee: other, status: "ringing", offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp }, at: serverTimestamp() };
+    try { await setDoc(ref, data); }
+    catch (e) {
+      if (e.code !== "permission-denied") throw e;
+      await deleteDoc(ref).catch(() => {});
+      await setDoc(ref, data).catch(() => { throw new Error("busy"); });
+    }
+    if (!call || call.pc !== pc) return;
+    call.unsub = onSnapshot(ref, async s => {
+      if (!call || call.pc !== pc || call.dead) return;
+      const d = s.data();
+      if (!s.exists()) { if (call.answered) finish("Call ended."); return; }
+      if (d.caller !== me.uid) return finish("They took another call.", true);
+      if (d.status === "declined") return finish("Call declined.");
+      if (d.status === "busy") return finish("They are on another call. Try again later.", true);
+      if (d.status === "accepted" && d.answer && !call.answered) {
+        call.answered = true; clearTimeout(call.ring); callUI("Connecting...", { end: "Cancel" });
+        call.ring = setTimeout(() => { if (call?.pc === pc && !call.started) failed(); }, 20000);
+        try { await pc.setRemoteDescription(d.answer); } catch (e) { callError(e); }
+      }
+    }, callError);
+    callUI("Calling... voice only", { end: "Cancel" });
+    call.ring = setTimeout(() => { if (call?.pc === pc && !call.answered) finish("No answer. Try again.", true); }, 45000);
+  } catch (e) { callError(e); }
+}
+function callWatch() {
+  stops.push(onSnapshot(doc(db, "calls", me.uid), async s => {
+    if (!s.exists()) {
+      if (call?.role === "callee" && !call.dead) { if (call.accepted) finish("Call ended."); else { closeCall(); } }
+      return;
+    }
+    const d = s.data();
+    if (d.caller === me.uid || d.status !== "ringing") return;
+    if (Date.now() - (d.at?.toMillis?.() ?? Date.now()) > 60000) return;
+    if (!links.some(l => l.id === pair(d.caller) && l.status === "accepted")) return;
+    if (call && !call.dead) { if (call.role === "callee" && call.other === d.caller && !call.accepted) call.offer = d.offer; else updateDoc(s.ref, { status: "busy" }).catch(() => {}); return; }
+    const user = await getUser(d.caller);
+    if (!user || user.suspended) return;
+    if (call && !call.dead) return;
+    if (call) closeCall();
+    call = { role: "callee", other: d.caller, user, offer: d.offer, accepted: false }; inCall = true;
+    showCall(user, "Incoming voice call", { answer: true, end: "Decline" });
+    navigator.vibrate?.([300, 200, 300]);
+    call.ring = setTimeout(() => { if (call && !call.accepted && !call.dead) hangup(); }, 50000);
+  }, () => {}));
+}
+$("call").onclick = () => { if (current && chatUser) startCall(current, current.split("_").find(x => x !== me.uid), chatUser); };
+$("callEnd").onclick = hangup;
+$("callRetry").onclick = () => { const { chat, other, user } = call; closeCall(); startCall(chat, other, user); };
+$("callMute").onclick = () => {
+  const t = call?.stream?.getAudioTracks()[0]; if (!t) return;
+  t.enabled = !t.enabled; $("callMute").textContent = t.enabled ? "Mute" : "Unmute";
+};
+$("callAnswer").onclick = async () => {
+  if (!call || call.role !== "callee" || call.accepted) return;
+  clearTimeout(call.ring); call.accepted = true; callUI("Connecting...", { end: "Cancel" });
+  try {
+    call.stream = await mic();
+    const pc = call.pc = peer(call.stream);
+    await pc.setRemoteDescription(call.offer);
+    await pc.setLocalDescription(await pc.createAnswer());
+    await iceDone(pc);
+    await updateDoc(doc(db, "calls", me.uid), { status: "accepted", answer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+    call.ring = setTimeout(() => { if (call?.pc === pc && !call.started) failed(); }, 20000);
+  } catch (e) { callError(e); }
+};
+addEventListener("pagehide", () => { if (call && !call.dead) hangup(); });
