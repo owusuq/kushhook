@@ -11,11 +11,11 @@
   --shadow:0 6px 24px rgba(0,0,0,.35);--soft:0 1px 3px rgba(0,0,0,.4)}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-html,body{margin:0;height:100%;font:14px/1.4 Nunito,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+html,body{margin:0;height:100%;font:12px/1.4 Nunito,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 body{background:radial-gradient(900px 500px at 0% -10%,var(--glow),transparent 70%),var(--bg)}
 
 /* controls */
-button,input,select,textarea{font:inherit;min-height:40px;border-radius:22px;border:1px solid var(--line);padding:8px 18px;background:var(--field);color:inherit;transition:background .2s,box-shadow .2s,transform .1s}
+button,input,select,textarea{font:inherit;min-height:36px;border-radius:22px;border:1px solid var(--line);padding:6px 14px;background:var(--field);color:inherit;transition:background .2s,box-shadow .2s,transform .1s}
 input:focus,select:focus,textarea:focus{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 30%,transparent);border-color:var(--brand)}
 ::placeholder{color:var(--muted)}
 button{background:var(--btn);color:#fff;border:0;cursor:pointer;font-weight:700}
@@ -23,21 +23,21 @@ button:active{transform:scale(.97)}
 button:focus-visible{outline:3px solid color-mix(in srgb,var(--brand) 45%,transparent);outline-offset:2px}
 .ghost,nav button{background:none;color:inherit}
 textarea{border-radius:20px;min-height:90px;resize:vertical}
-.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.icon{display:grid;place-items:center;flex:none;width:42px;height:42px;min-height:0;padding:0;border-radius:50%;background:none;color:var(--muted)}
+.ic{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.icon{display:grid;place-items:center;flex:none;width:38px;height:38px;min-height:0;padding:0;border-radius:50%;background:none;color:var(--muted)}
 .icon:hover{background:var(--field);color:var(--ink)}
 .sendbtn{background:var(--btn);color:#fff}.sendbtn:hover{background:var(--btn);color:#fff;filter:brightness(1.08)}
 .danger{background:none;color:#e5484d;border:1px solid #e5484d55}
 a{color:var(--brand)}
 
 /* sign in */
-.logo{font:400 48px/1.4 Pacifico,cursive;margin:0;color:var(--brand)}.logo span{color:var(--hook)}.small{font-size:24px}
+.logo{font:400 40px/1.4 Pacifico,cursive;margin:0;color:var(--brand)}.logo span{color:var(--hook)}.small{font-size:20px}
 .center{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
 .tag{color:var(--muted);margin:0 0 8px;max-width:28ch}
 .google{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#3c3556;box-shadow:var(--shadow);padding:10px 22px}
 #setup,#postForm{display:flex;flex-direction:column;gap:10px}
 #setup{width:min(100%,340px);text-align:left}
-.check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}
 .check input{min-height:0;width:20px;height:20px;accent-color:var(--btn)}
 #error{color:#e5484d;margin:0;min-height:1em}
 
@@ -53,11 +53,11 @@ section,#messages{flex:1;overflow-y:auto;padding:6px 14px 18px}
 section>input,#postForm>*{width:100%}
 section>input{margin-bottom:12px}
 section>p{color:var(--muted);text-align:center;padding:28px 12px}
-h3{margin:18px 4px 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+h3{margin:18px 4px 8px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 
 /* tabs */
 nav{display:flex;gap:4px;padding:4px 10px 8px}
-nav button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:54px;padding:6px 4px;border-radius:16px;color:var(--muted);font-size:11px;font-weight:700;position:relative}
+nav button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:54px;padding:6px 4px;border-radius:16px;color:var(--muted);font-size:10px;font-weight:700;position:relative}
 nav button.on{background:var(--card);color:var(--brand);box-shadow:var(--soft)}
 nav .badge{position:absolute;top:3px;left:calc(50% + 6px)}
 nav button span{white-space:nowrap}
@@ -66,8 +66,8 @@ nav button span{white-space:nowrap}
 /* people rows */
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;margin:0 0 10px;background:var(--card);border-radius:20px;box-shadow:var(--soft)}
 .pname{flex:1;min-width:110px;display:flex;flex-direction:column;line-height:1.2;overflow-wrap:anywhere}
-.pname small{color:var(--muted);font-size:12px}
-.row button{min-height:38px;padding:6px 14px;font-size:13px}
+.pname small{color:var(--muted);font-size:10px}
+.row button{min-height:38px;padding:6px 12px;font-size:11px}
 .row .ghost{border:1px solid var(--line);color:var(--muted)}
 .row>small{color:var(--muted)}
 .avatar{flex:none;aspect-ratio:1;display:inline-grid;place-items:center;width:44px;height:44px;border-radius:50%;font-size:22px;font-weight:800;color:#fff;box-shadow:0 0 0 3px color-mix(in srgb,var(--card) 80%,transparent),var(--soft)}
@@ -87,24 +87,24 @@ nav button span{white-space:nowrap}
 #who{flex:1;display:flex;align-items:center;min-width:0;font-weight:800}
 .whotext{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 #who .avatar{width:38px;height:38px;font-size:19px;margin-right:10px}
-.presence{font-weight:600;font-size:11px;color:var(--muted)}.presence.on{color:#0fa968}
+.presence{font-weight:600;font-size:10px;color:var(--muted)}.presence.on{color:#0fa968}
 #messages{display:flex;flex-direction:column;gap:8px;padding-top:14px}
 #chat:has(#send[hidden]) #messages:empty::before{content:"Choose a chat to begin";margin:auto;color:var(--muted)}
 #messages:empty::before{content:"No messages yet. Say hello 👋";margin:auto;color:var(--muted)}
 .bubble{max-width:78%;padding:10px 15px;border-radius:20px 20px 20px 6px;background:var(--them);box-shadow:var(--soft);align-self:flex-start;white-space:pre-wrap;overflow-wrap:anywhere}
 .bubble.me{align-self:flex-end;border-radius:20px 20px 6px 20px;background:var(--mine)}
 .bubble a{color:var(--brand);font-weight:600}
-.del{min-height:26px;padding:2px 10px;font-size:11px;background:none;color:var(--muted);border:1px solid var(--line);margin-top:6px;font-weight:600}
+.del{min-height:24px;padding:2px 9px;font-size:10px;background:none;color:var(--muted);border:1px solid var(--line);margin-top:6px;font-weight:600}
 .media img,.media video{display:block;width:240px;max-width:100%;max-height:320px;border-radius:14px;cursor:pointer}
 #send{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
-#status{width:100%;color:var(--muted);font-size:12px;padding:0 6px}
+#status{width:100%;color:var(--muted);font-size:10px;padding:0 6px}
 #status:empty{display:none}
 #emojis{width:100%;display:flex;flex-wrap:wrap}
-#emojis button{background:none;padding:4px 8px;font-size:22px;min-height:40px}
+#emojis button{background:none;padding:4px 8px;font-size:20px;min-height:40px}
 #msg{flex:1;min-width:0;margin:0 4px}
 
 /* times, unread dots, bios, reports */
-.time{color:var(--muted);font-size:11px;font-weight:600}
+.time{color:var(--muted);font-size:9.5px;font-weight:600}
 .post .time{margin-left:8px}
 .foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px}
 .foot .del{margin-top:0}
@@ -112,8 +112,8 @@ nav button span{white-space:nowrap}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--hook);margin-left:8px;vertical-align:middle;box-shadow:0 0 0 3px color-mix(in srgb,var(--hook) 28%,transparent)}
 .row.new{box-shadow:0 0 0 2px color-mix(in srgb,var(--hook) 55%,transparent),var(--soft)}
 .row.new .pname .when{color:var(--ink);font-weight:700}
-.pname .when{font-size:12px}
-.pname .bio{color:var(--ink);opacity:.75;margin-top:3px;font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pname .when{font-size:10px}
+.pname .bio{color:var(--ink);opacity:.75;margin-top:3px;font-size:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #bio{min-height:64px;border-radius:18px;resize:none;font-weight:400}
 .report{padding:14px 16px;margin-bottom:10px;background:var(--card);border-radius:20px;box-shadow:var(--soft);overflow-wrap:anywhere}
 .report>b{display:block}.report>small{color:var(--muted)}
@@ -135,7 +135,7 @@ dialog::backdrop{background:#0008;backdrop-filter:blur(5px)}
 .actions{display:flex;gap:8px;justify-content:flex-end}
 
 /* Android download bar (only shown on Android phones in a browser) */
-#apkbar{position:fixed;z-index:60;top:max(10px,env(safe-area-inset-top));left:12px;right:12px;max-width:520px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;background:var(--btn);color:#fff;font-size:13px;font-weight:600;border-radius:20px;box-shadow:var(--shadow)}
+#apkbar{position:fixed;z-index:60;top:max(10px,env(safe-area-inset-top));left:12px;right:12px;max-width:520px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;background:var(--btn);color:#fff;font-size:11px;font-weight:600;border-radius:20px;box-shadow:var(--shadow)}
 #apkbar[hidden]{display:none}
 #apkbar span{flex:1;min-width:0}
 #apkbar a{background:#fff;color:#3a2a8a;font-weight:800;text-decoration:none;padding:8px 16px;border-radius:999px}
@@ -214,24 +214,22 @@ dialog::backdrop{background:rgba(20,10,40,.35);-webkit-backdrop-filter:blur(8px)
 /* fallbacks: no blur support, or the person asked their phone for less transparency */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){:root{--glass:var(--card);--glass2:var(--card)}}
 @media(prefers-reduced-transparency:reduce){:root{--glass:var(--card);--glass2:var(--card);--sheen:transparent}}
-.count{padding:0 6px 8px!important;margin:0;text-align:left!important;font-size:12px;font-weight:700;color:var(--muted)}
+.count{padding:0 6px 8px!important;margin:0;text-align:left!important;font-size:10px;font-weight:700;color:var(--muted)}
 /* admin member actions */
 .row .foot{flex-basis:100%;margin:0}
 .row button.danger,.report button.danger{background:none;color:#e5484d;border:1px solid #e5484d66;box-shadow:none}
 .row.off{opacity:.65}
 .tag{color:#e5484d!important;font-weight:700}
 
-/* iPhones zoom into fields smaller than 16px, so keep typing fields full size there */
-@supports(-webkit-touch-callout:none){input,textarea,select{font-size:16px}}
 
 /* legal links and storage notice */
-.legal{margin:0;color:var(--muted);font-size:12px;max-width:34ch;text-align:center}
+.legal{margin:0;color:var(--muted);font-size:10px;max-width:34ch;text-align:center}
 .legal a{color:var(--brand);font-weight:700}
-#notice{position:fixed;z-index:70;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));max-width:520px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 14px 12px 18px;font-size:12px;line-height:1.4;
+#notice{position:fixed;z-index:70;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));max-width:520px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;font-size:10.5px;line-height:1.4;
   background:var(--glass2);color:var(--ink);border:1px solid var(--rim);border-radius:20px;-webkit-backdrop-filter:blur(22px) saturate(1.8);backdrop-filter:blur(22px) saturate(1.8);box-shadow:0 10px 30px var(--shade),inset 0 1px 0 var(--rim)}
 #notice span{flex:1;min-width:0}
 #notice a{color:var(--brand);font-weight:700}
-#notice button{flex:none;min-height:36px;padding:6px 16px;font-size:13px;background:linear-gradient(135deg,var(--brand),var(--btn));color:#fff}
+#notice button{flex:none;min-height:32px;padding:5px 14px;font-size:11px;background:linear-gradient(135deg,var(--brand),var(--btn));color:#fff}
 #profileForm .legal{max-width:none}
 
 /* admin: rarely used actions stay out of sight until you tap the dots */
