@@ -45,7 +45,7 @@ $("setup").onsubmit = async e => {
 
 async function start() {
   $("auth").hidden = true; $("app").hidden = false;
-  admin = (await getDoc(doc(db, "admins", me.uid))).exists();
+  admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
   if (admin) $("type").add(new Option("Bet odds (18+)", "odds"));
   stops.push(onSnapshot(query(collection(db, "friends"), where("users", "array-contains", me.uid)), async s => {
     links = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -87,7 +87,7 @@ async function search() {
   if (run !== searchRun) return;
   $("results").replaceChildren(...[...found].filter(([id]) => id !== me.uid && !links.some(l => l.id === pair(id))).map(([id, u]) => {
     const row = el("div", "", "row");
-    row.append(el("span", `${u.name} (@${u.username})`), button("Add", () => setDoc(doc(db, "friends", pair(id)), { users: [me.uid, id].sort(), from: me.uid, status: "pending" })));
+    row.append(el("span", `${u.name} (@${u.username})`), button(admin ? "Connect" : "Add", () => setDoc(doc(db, "friends", pair(id)), { users: [me.uid, id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
     return row;
   }));
 }
