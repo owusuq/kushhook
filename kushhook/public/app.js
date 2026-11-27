@@ -255,13 +255,14 @@ async function search() {
     if (words.some(w => w.startsWith(term)) || words.map(w => w[0]).join("").startsWith(term)) return 2;
     return un.includes(term) || n.includes(term) ? 3 : -1;
   };
-  const list = all.filter(u => !u.suspended && u.id !== me.uid && !links.some(l => l.id === pair(u.id))).map(u => [rank(u), u]).filter(x => x[0] >= 0)
+  const list = all.filter(u => !u.suspended && u.id !== me.uid && links.find(l => l.id === pair(u.id))?.status !== "blocked").map(u => [rank(u), u]).filter(x => x[0] >= 0)
     .sort((a, b) => a[0] - b[0] || (a[1].nameLower || "").localeCompare(b[1].nameLower || "")).slice(0, 50);
   $("results").replaceChildren(
     ...(list.length ? [el("p", term ? `${list.length} found` : `${list.length} people`, "count")] : [el("p", term ? "No one matches that. Try fewer letters." : "No one to add yet.")]),
     ...list.map(([, u]) => {
       const row = el("div", "", "row");
-      row.append(avatar(u), nameBlock(u, true), button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
+      const l = links.find(x => x.id === pair(u.id));
+      row.append(avatar(u), nameBlock(u, true), l?.status === "accepted" ? button("Message", () => { document.querySelector('nav [data-tab="chats"]')?.click(); openChat(l.id, u); }) : l ? el("small", "Pending") : button(admin ? "Connect" : "Send request", () => setDoc(doc(db, "friends", pair(u.id)), { users: [me.uid, u.id].sort(), from: me.uid, status: admin ? "accepted" : "pending" })));
       return row;
     }));
 }
