@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Kushhook</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap">
-<link rel="stylesheet" href="styles.css?v=1795753998191">
+<link rel="stylesheet" href="styles.css?v=1795754455343">
 <link rel="manifest" href="manifest.webmanifest">
 <script>try{var t=localStorage.getItem("kushhook-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 <meta name="theme-color" content="#f6f3fc" media="(prefers-color-scheme: light)">
@@ -27,11 +27,17 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
   <symbol id="i-block" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
   <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8l7.4-4.3M8.3 13.2l7.4 4.3"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></symbol>
   <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></symbol>
   <symbol id="i-clip" viewBox="0 0 24 24"><path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7-7L13 4.5a3.4 3.4 0 0 1 4.8 4.8L9.6 17.5a1.8 1.8 0 0 1-2.6-2.6L14.5 7.5"/></symbol>
 </svg>
 
+<div id="installbar" hidden>
+  <span id="installText"></span>
+  <button id="installGo" hidden>Install</button>
+  <button id="installNo" class="ghost" aria-label="Dismiss">✕</button>
+</div>
 <div id="apkbar" hidden>
   <span>Get the Kushhook Android app</span>
   <a id="apkget" href="https://github.com/owusuq/kushhook-app/releases/latest/download/Kushhook.1.apk" download="Kushhook.apk">Download</a>
@@ -57,6 +63,7 @@
     <header>
       <b class="logo small">Kush<span>hook</span></b>
       <button id="me" class="ghost" aria-label="Edit profile"></button>
+      <button id="share" class="icon" aria-label="Share Kushhook" title="Share Kushhook"><svg class="ic"><use href="#i-share"/></svg></button>
       <button id="logout" class="icon" aria-label="Sign out" title="Sign out"><svg class="ic"><use href="#i-logout"/></svg></button>
     </header>
     <nav>
@@ -88,14 +95,23 @@
       <button id="call" class="icon" aria-label="Voice call (voice only)" title="Voice call only" hidden><svg class="ic"><use href="#i-phone"/></svg></button>
       <button id="more" class="icon" aria-label="More options" aria-expanded="false" hidden><svg class="ic"><use href="#i-more"/></svg></button>
       <div id="chatMenu" hidden>
+        <button id="find" type="button" hidden>Search in chat</button>
+        <button id="mute" type="button" hidden>Mute chat</button>
         <button id="lock" type="button" hidden>Check encryption</button>
         <button id="clear" type="button" hidden>Clear chat</button>
         <button id="report" type="button" hidden>Report</button>
         <button id="block" type="button" class="warn" hidden>Block</button>
       </div>
     </header>
+    <div id="chatSearch" hidden>
+      <input id="chatFind" type="search" placeholder="Search this chat" autocomplete="off">
+      <small id="findCount"></small>
+      <button type="button" id="chatFindX" class="icon" aria-label="Close search">✕</button>
+    </div>
     <div id="messages"></div>
     <form id="send" hidden>
+      <button type="button" id="toLatest" class="icon" aria-label="Jump to latest message" hidden>↓</button>
+      <div id="replyBar" hidden><span id="replyText"></span><button type="button" id="replyX" class="icon" aria-label="Cancel reply">✕</button></div>
       <small id="status" role="status"></small>
       <div id="emojis"></div>
       <button type="button" id="smile" class="icon" aria-label="Emojis"><svg class="ic"><use href="#i-smile"/></svg></button>
@@ -166,7 +182,7 @@
   } catch (e) {}
 })();
 </script>
-<script type="module" src="app.js?v=1795753998191"></script>
+<script type="module" src="app.js?v=1795754455343"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>

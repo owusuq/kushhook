@@ -6,6 +6,7 @@ import { firebaseConfig } from "./config.js";
 const fb = initializeApp(firebaseConfig), auth = getAuth(fb), db = getFirestore(fb);
 const $ = id => document.getElementById(id);
 let me, profile, admin = false, current, chatUser, openClear, links = [], stops = [], stopChat;
+let muted = null, replyTo = null, shownChat = null, findTerm = "", pinDocs = [], feedDocs = [];
 const users = {};
 const isQuota = e => e?.code === "resource-exhausted" || /quota/i.test(e?.message || "");
 function banner() {
@@ -169,6 +170,41 @@ $("setup").onsubmit = async e => {
   catch { $("error").textContent = "Could not create profile. Try another username."; }
 };
 
+function drawFeed() {
+  const ids = new Set(), docs = [...pinDocs, ...feedDocs].filter(d => !ids.has(d.id) && ids.add(d.id));
+  $("posts").replaceChildren(...docs.map(d => {
+      const p = d.data(), box = el("div", "", "post");
+      if (p.pinned) { box.classList.add("pinned"); box.append(el("div", "📌 Pinned", "pin")); }
+      box.append(el("b", "@" + p.username), el("small", p.at?.toMillis ? clock(p.at.toMillis()) : "", "time"));
+      if (p.type === "odds") box.append(el("span", "Bet odds, 18+ only\n", "odds")); else box.append("\n");
+      const url = p.title ? (p.text.match(/https?:\/\/[^\s<>"]+/i) || [])[0] : null;
+      if (url) {
+        let host = ""; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { host = ""; }
+        const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener noreferrer", className: "linkcard" });
+        a.append(el("b", p.title), el("small", host ? "Opens " + host : "Tap to open"), el("span", "↗", "go"));
+        box.append(a);
+        const rest = p.text.replace(url, "").trim(); if (rest) rich(box, rest);
+      } else {
+        if (p.title) box.append(el("b", p.title, "ptitle"), "\n");
+        rich(box, p.text);
+      }
+      const foot = el("div", "", "foot");
+      if (admin) foot.append(Object.assign(button(p.pinned ? "Unpin" : "Pin", () => setPin(d, !p.pinned)), { className: "del" }));
+      if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
+      if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
+      if (foot.childNodes.length) box.append(foot);
+      return box;
+  }));
+}
+async function setPin(d, on) {
+  try {
+    const b = writeBatch(db);
+    if (on) for (const o of pinDocs) if (o.id !== d.id) b.update(o.ref, { pinned: false });
+    b.update(d.ref, { pinned: on });
+    await b.commit();
+  } catch (e) { fail(e); }
+}
+
 async function start() {
   $("auth").hidden = true; $("app").hidden = false;
   admin = me.email === "daakyehenefoundation@gmail.com" || (await getDoc(doc(db, "admins", me.uid))).exists();
@@ -184,29 +220,8 @@ async function start() {
     if (current && !links.some(l => l.id === current && l.status === "accepted")) closeChat();
     else if (current && links.find(l => l.id === current)?.clear?.[me.uid]?.toMillis?.() !== openClear) openChat(current, chatUser);
   }, fail));
-  stops.push(onSnapshot(query(collection(db, "posts"), orderBy("at", "desc"), limit(50)), s => {
-    $("posts").replaceChildren(...s.docs.map(d => {
-      const p = d.data(), box = el("div", "", "post");
-      box.append(el("b", "@" + p.username), el("small", p.at?.toMillis ? clock(p.at.toMillis()) : "", "time"));
-      if (p.type === "odds") box.append(el("span", "Bet odds, 18+ only\n", "odds")); else box.append("\n");
-      const url = p.title ? (p.text.match(/https?:\/\/[^\s<>"]+/i) || [])[0] : null;
-      if (url) {
-        let host = ""; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { host = ""; }
-        const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener noreferrer", className: "linkcard" });
-        a.append(el("b", p.title), el("small", host ? "Opens " + host : "Tap to open"), el("span", "↗", "go"));
-        box.append(a);
-        const rest = p.text.replace(url, "").trim(); if (rest) rich(box, rest);
-      } else {
-        if (p.title) box.append(el("b", p.title, "ptitle"), "\n");
-        rich(box, p.text);
-      }
-      const foot = el("div", "", "foot");
-      if (admin || p.uid === me.uid) foot.append(Object.assign(button("Delete", () => deleteDoc(d.ref)), { className: "del" }));
-      if (p.uid !== me.uid) foot.append(Object.assign(button("Report", () => report("post", d.id, p.uid, "posts/" + d.id, p.text)), { className: "del" }));
-      if (foot.childNodes.length) box.append(foot);
-      return box;
-    }));
-  }, fail));
+  stops.push(onSnapshot(query(collection(db, "posts"), where("pinned", "==", true), limit(5)), s => { pinDocs = s.docs; drawFeed(); }, () => {}));
+  stops.push(onSnapshot(query(collection(db, "posts"), orderBy("at", "desc"), limit(50)), s => { feedDocs = s.docs; drawFeed(); }, fail));
   if (admin) stops.push(onSnapshot(query(collection(db, "reports"), orderBy("at", "desc"), limit(50)), s => {
     reports = s.docs.map(d => ({ id: d.id, ...d.data(), at: d.data().at?.toMillis?.() || Date.now() }));
     const bd = document.querySelector("#adminTab .badge"); bd.hidden = !reports.length; bd.textContent = reports.length;
@@ -218,10 +233,10 @@ async function start() {
 // ---- New-message dots (remembered on this device) ----
 let readAt = {}, latest = {}, watching = {}, firstRun = false;
 const readKey = () => "kh_read_" + me.uid;
-const loadRead = () => { try { const t = localStorage.getItem(readKey()); firstRun = t === null; readAt = JSON.parse(t || "{}"); } catch { readAt = {}; } };
+const loadRead = () => { muted = null; try { const t = localStorage.getItem(readKey()); firstRun = t === null; readAt = JSON.parse(t || "{}"); } catch { readAt = {}; } };
 const saveRead = () => { try { localStorage.setItem(readKey(), JSON.stringify(readAt)); } catch {} };
 const viewing = id => current === id && $("app").classList.contains("open") && document.visibilityState === "visible";
-const unread = id => { const m = latest[id]; return !!m && m.from !== me.uid && m.at > (readAt[id] || 0); };
+const unread = id => { const m = latest[id]; return !!m && m.from !== me.uid && m.at > (readAt[id] || 0) && !isMuted(id); };
 function markRead(id) { const m = latest[id]; if (m && m.at > (readAt[id] || 0)) { readAt[id] = m.at; saveRead(); drawChats().catch(() => {}); } }
 function watchLatest(ids) {
   for (const id of Object.keys(watching)) if (!ids.includes(id)) { watching[id](); delete watching[id]; delete latest[id]; }
@@ -241,9 +256,13 @@ async function drawChats() {
   const all = found.filter(x => x.u && !x.u.suspended), card = ({ l, u }, ...btns) => { const row = el("div", "", "row"); row.append(avatar(u), nameBlock(u, l.status === "pending"), ...btns); return row; };
   const ghost = (text, fn) => Object.assign(button(text, fn), { className: "ghost" });
   const chats = all.filter(x => x.l.status === "accepted").sort((a, b) => (latest[b.l.id]?.at || 0) - (latest[a.l.id]?.at || 0)).map(x => {
-    const r = card(x, button("Open", () => openChat(x.l.id, x.u))), m = latest[x.l.id];
+    const r = card(x, el("span", "›", "chev")), m = latest[x.l.id];
+    const go = () => openChat(x.l.id, x.u);
+    r.classList.add("tap"); r.tabIndex = 0; r.setAttribute("role", "button"); r.onclick = go;
+    r.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
     if (m) r.querySelector(".pname").append(el("small", (m.from === me.uid ? "You · " : "") + clock(m.at), "when"));
     if (unread(x.l.id)) { r.classList.add("new"); r.querySelector(".pname b").append(el("i", "", "dot")); }
+    if (isMuted(x.l.id)) r.querySelector(".pname b").append(" 🔕");
     return r;
   });
   const n = all.filter(x => x.l.status === "accepted" && unread(x.l.id)).length, cb = document.querySelector('nav [data-tab="chats"] .badge');
@@ -299,7 +318,7 @@ function openChat(id, u) {
   openClear = cleared?.toMillis?.();
   const label = el("span", "", "whotext"), pr = Object.assign(el("small", "", "presence"), { id: "presence" });
   label.append(el("span", u.name, "wname"), pr); $("who").replaceChildren(avatar(u), label);
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("call").hidden = false; $("app").classList.add("open"); markRead(id);
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("mute").hidden = $("find").hidden = $("call").hidden = false; $("app").classList.add("open"); markRead(id); onChatOpen(id);
   // wait for the other person's public key, then lock and unlock messages with the key you share
   const other = id.split("_").find(x => x !== me.uid); let first, done = false;
   ckey = null; partnerPub = null; lastSnap = null; seen = null; keyReady = new Promise(r => first = r);
@@ -329,10 +348,14 @@ async function render() {
   await keyReady;
   const rows = await Promise.all(s.docs.map(async d => {
     const raw = d.data(), m = await readMsg(raw), mine = raw.from === me.uid, bubble = el("div", "", "bubble" + (mine ? " me" : ""));
+    const rp = splitReply(m.text || ""), snip = m.path ? "📎 " + (m.name || "Attachment") : rp.body;
+    if (rp.quote) bubble.append(el("div", rp.quote, "quote"));
     if (m.path) bubble.append(media(m, d.ref));
-    rich(bubble, m.text);
+    rich(bubble, rp.body);
+    bubble.dataset.q = (rp.body + " " + (m.name || "")).toLowerCase();
     const at = raw.at?.toMillis?.(), foot = el("div", "", "foot");
     foot.append(el("small", at ? clock(at) : "sending…", "time"));
+    foot.append(Object.assign(button("Reply", () => startReply(snip)), { className: "del" }));
     if (mine || admin) foot.append(Object.assign(button(mine ? "Unsend" : "Delete", async () => {
       if (!confirm(mine ? "Unsend this message? It will be removed for both of you." : "Delete this message for everyone?")) return;
       await removeMessage(d.ref, raw);
@@ -342,13 +365,15 @@ async function render() {
     return bubble;
   }));
   if (run !== renderRun) return;
-  $("messages").replaceChildren(...rows);
-  $("messages").scrollTop = $("messages").scrollHeight;
+  const box = $("messages"), near = box.scrollHeight - box.scrollTop - box.clientHeight < 200, lastMine = s.docs.at(-1)?.data().from === me.uid;
+  box.replaceChildren(...rows); applyFind();
+  if (near || shownChat !== cid || lastMine) box.scrollTop = box.scrollHeight;
+  shownChat = cid; updateLatest();
 }
 function closeChat() {
   stopChat?.(); stopKeys?.(); stopPresence?.(); typing(false); purgeMine(current); clearUrls(); current = null; ckey = null; lastSnap = null;
   $("messages").replaceChildren(); $("who").textContent = "Choose a chat"; setStatus("");
-  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("call").hidden = true; $("chatMenu").hidden = true; $("app").classList.remove("open");
+  $("send").hidden = $("block").hidden = $("clear").hidden = $("lock").hidden = $("report").hidden = $("more").hidden = $("mute").hidden = $("find").hidden = $("call").hidden = true; $("chatMenu").hidden = true; onChatClose(); $("app").classList.remove("open");
 }
 $("report").onclick = () => { const other = current.split("_").find(x => x !== me.uid); report("user", other, other, "users/" + other); };
 $("clear").onclick = () => confirm("Clear this chat for you? The other person keeps their copy.") && updateDoc(doc(db, "friends", current), { ["clear." + me.uid]: serverTimestamp() }).catch(fail);
@@ -364,8 +389,8 @@ $("send").onsubmit = async e => {
   const text = $("msg").value.trim(), chat = current;
   if (!text || !chat) return;
   if (!ckey) return setStatus(`${chatUser.name} hasn't turned on encryption yet.`);
-  $("msg").value = ""; typing(false);
-  try { await addDoc(collection(db, "friends", chat, "messages"), { from: me.uid, text: b64(await seal(ckey, enc.encode(text))), at: serverTimestamp(), e: 1 }); }
+  const out = withReply(text); $("msg").value = ""; saveDraft(chat, ""); clearReply(); typing(false);
+  try { await addDoc(collection(db, "friends", chat, "messages"), { from: me.uid, text: b64(await seal(ckey, enc.encode(out))), at: serverTimestamp(), e: 1 }); }
   catch (err) { fail(err); }
 };
 // ---- Online and typing ----
@@ -832,3 +857,75 @@ function applyTheme() {
 }
 document.querySelectorAll("[data-theme-pick]").forEach(b => b.onclick = () => { themePick = b.dataset.themePick; applyTheme(); });
 applyTheme();
+
+// ---- Extras: share, reply, drafts, jump to latest, search, mute, install tip ----
+$("share").onclick = async () => {
+  const url = location.origin + "/";
+  try {
+    if (navigator.share) await navigator.share({ title: "Kushhook", text: "Join me on Kushhook: private chat, meet people and share what you love.", url });
+    else { await navigator.clipboard.writeText(url); alert("Link copied. Paste it to your friends."); }
+  } catch (e) { if (e?.name !== "AbortError") prompt("Copy this link:", url); }
+};
+
+// Reply: the quote travels inside the encrypted message text
+const splitReply = t => { const m = /^\u200b↩ ([^\n]*)\u200b\n([\s\S]*)$/.exec(t || ""); return m ? { quote: m[1], body: m[2] } : { quote: "", body: t || "" }; };
+const withReply = t => replyTo ? `\u200b↩ ${replyTo}\u200b\n${t}` : t;
+function startReply(snip) {
+  replyTo = (snip || "").replace(/\u200b/g, "").replace(/\s+/g, " ").trim().slice(0, 70) || "Message";
+  $("replyText").textContent = replyTo; $("replyBar").hidden = false; $("msg").focus();
+}
+function clearReply() { replyTo = null; $("replyBar").hidden = true; }
+$("replyX").onclick = clearReply;
+
+// Drafts: half-written messages stay on this device until sent or you sign out
+const draftKey = id => "kh_draft_" + me.uid + "_" + id;
+function saveDraft(id, t) { try { if (t) localStorage.setItem(draftKey(id), t); else localStorage.removeItem(draftKey(id)); } catch {} }
+function loadDraft(id) { try { return localStorage.getItem(draftKey(id)) || ""; } catch { return ""; } }
+$("msg").addEventListener("input", () => { if (current) saveDraft(current, $("msg").value); });
+$("logout").addEventListener("click", () => { try { for (const k of Object.keys(localStorage)) if (k.startsWith("kh_draft_")) localStorage.removeItem(k); } catch {} });
+
+// Jump to latest
+function updateLatest() { const b = $("messages"); $("toLatest").hidden = $("send").hidden || b.scrollHeight - b.scrollTop - b.clientHeight < 200; }
+$("messages").addEventListener("scroll", updateLatest, { passive: true });
+$("toLatest").onclick = () => $("messages").scrollTo({ top: $("messages").scrollHeight, behavior: "smooth" });
+
+// Search inside the open chat (runs on the messages already on screen)
+function applyFind() {
+  let n = 0;
+  for (const b of $("messages").children) { const hit = !findTerm || (b.dataset.q || "").includes(findTerm); b.hidden = !hit; if (hit) n++; }
+  $("findCount").textContent = findTerm ? n + " found" : "";
+}
+function closeFind() { findTerm = ""; $("chatFind").value = ""; $("chatSearch").hidden = true; $("chat").classList.remove("finding"); applyFind(); }
+$("find").onclick = () => { $("chatSearch").hidden = false; $("chat").classList.add("finding"); $("chatFind").focus(); };
+$("chatFind").oninput = () => { findTerm = $("chatFind").value.trim().toLowerCase(); applyFind(); };
+$("chatFindX").onclick = closeFind;
+$("chatFind").addEventListener("keydown", e => { if (e.key === "Escape") closeFind(); });
+
+// Mute: no dot or badge for this chat on this device (calls still ring)
+function mutedList() { if (!muted) { try { muted = new Set(JSON.parse(localStorage.getItem("kh_mute_" + me.uid) || "[]")); } catch { muted = new Set(); } } return muted; }
+const isMuted = id => mutedList().has(id);
+const muteLabel = () => { $("mute").textContent = current && isMuted(current) ? "Unmute chat" : "Mute chat"; };
+$("mute").onclick = () => {
+  const s = mutedList(); if (s.has(current)) s.delete(current); else s.add(current);
+  try { localStorage.setItem("kh_mute_" + me.uid, JSON.stringify([...s])); } catch {}
+  muteLabel(); drawChats().catch(() => {});
+};
+
+function onChatOpen(id) { $("msg").value = loadDraft(id); clearReply(); closeFind(); muteLabel(); $("toLatest").hidden = true; }
+function onChatClose() { clearReply(); closeFind(); shownChat = null; $("toLatest").hidden = true; }
+
+// Install tip: iPhone/iPad (Add to Home Screen) and browsers that offer install. Android has its own bar.
+(() => {
+  const bar = $("installbar"); if (!bar) return;
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const android = /Android/i.test(navigator.userAgent);
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let off = false; try { off = localStorage.getItem("kh_install") === "no"; } catch {}
+  if (standalone || android || off) return;
+  const hide = () => { bar.hidden = true; try { localStorage.setItem("kh_install", "no"); } catch {} };
+  $("installNo").onclick = hide;
+  let ev = null;
+  addEventListener("beforeinstallprompt", e => { e.preventDefault(); ev = e; $("installText").textContent = "Install Kushhook on this device"; $("installGo").hidden = false; bar.hidden = false; });
+  $("installGo").onclick = async () => { if (!ev) return; ev.prompt(); await ev.userChoice.catch(() => {}); hide(); };
+  if (ios) { $("installText").textContent = "To install: tap Share, then Add to Home Screen"; bar.hidden = false; }
+})();

@@ -184,6 +184,10 @@ service cloud.firestore {
         && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
         && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 60))
         && request.resource.data.at == request.time;
+      // Admins can pin or unpin a post.
+      allow update: if member() && isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned'])
+        && request.resource.data.pinned is bool;
       allow delete: if member() && (resource.data.uid == uid() || isAdmin());
     }
   }
